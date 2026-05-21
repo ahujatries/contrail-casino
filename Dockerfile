@@ -22,7 +22,9 @@ COPY packages/db ./packages/db
 COPY packages/shared ./packages/shared
 
 ENV NODE_ENV=production
-ENV WORKER_POLL_INTERVAL_MS=15000
+ENV WORKER_POLL_INTERVAL_MS=30000
+# Railway injects PORT at runtime; default to 8080 for local docker runs.
+EXPOSE 8080
 
 # Avoid loading .env.local — env comes from the platform (Railway dashboard / `railway variables set`).
 CMD ["pnpm", "--filter", "worker", "start"]

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { FreshnessPill } from './FreshnessPill';
 
 type Route = 'home' | 'bets' | 'bet' | 'tracker' | 'leaderboard' | 'your-bets' | 'about';
 
@@ -54,6 +55,7 @@ export function TopBar({ callsign, balance, active = 'home' }: Props) {
         <a className={active === 'about' ? 'active' : ''} href="/about">About</a>
       </nav>
       <div className="topbar-right">
+        <FreshnessPill />
         <span className="mono utc-clock">UTC {utc}</span>
         <div className="callsign">
           <span className="you">YOU</span>

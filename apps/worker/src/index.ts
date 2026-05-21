@@ -8,21 +8,29 @@ import { writeLiveSnapshot } from './live-snapshot.ts';
 import { resolveOnEvent } from './bet-resolver.ts';
 import { isHeavyTypecode } from '@airport-pong/shared';
 import { log } from './logger.ts';
+import { health, startHealthServer } from './healthz.ts';
 
 // 30s default keeps us at ~2880 calls/day, safely under OpenSky's ~4000/day
 // authenticated free-tier limit. Override via WORKER_POLL_INTERVAL_MS env.
 const POLL_INTERVAL_MS = Number(process.env.WORKER_POLL_INTERVAL_MS ?? 30_000);
+health.setPollIntervalMs(POLL_INTERVAL_MS);
 
 // 429 backoff state — exponential, capped at 30 minutes.
+// Reduced ceiling since we now auto-rotate to another client on 429.
 let backoffMultiplier = 1;
-const MAX_BACKOFF_MULT = 60; // 30s * 60 = 30 min ceiling
-const resetBackoff = () => { backoffMultiplier = 1; };
+const MAX_BACKOFF_MULT = 20;
+const resetBackoff = () => {
+  backoffMultiplier = 1;
+  health.setBackoffMultiplier(1);
+};
 const grow429Backoff = () => {
   backoffMultiplier = Math.min(MAX_BACKOFF_MULT, Math.max(2, backoffMultiplier * 2));
+  health.setBackoffMultiplier(backoffMultiplier);
 };
 const currentInterval = () => POLL_INTERVAL_MS * backoffMultiplier;
 
 async function tick(detector: EventDetector) {
+  health.recordTickStart();
   const startMs = Date.now();
   let resp;
   try {
@@ -30,9 +38,10 @@ async function tick(detector: EventDetector) {
     resetBackoff();
   } catch (err) {
     const msg = String(err);
+    health.recordTickFailure(msg);
     if (msg.includes('429')) {
       grow429Backoff();
-      log.warn('opensky 429 — backing off', {
+      log.warn('opensky 429 — all clients rate-limited, backing off', {
         nextIntervalMs: currentInterval(),
         nextIntervalSec: Math.round(currentInterval() / 1000),
       });
@@ -106,6 +115,8 @@ async function tick(detector: EventDetector) {
     log.error('live snapshot failed', { error: String(err) });
   }
 
+  health.recordTickSuccess(detected.length);
+
   log.info('tick', {
     states: resp.states.length,
     detected: detected.length,
@@ -120,6 +131,9 @@ async function main() {
     auth: describeAuth(),
     pollIntervalMs: POLL_INTERVAL_MS,
   });
+
+  // Health endpoint for Railway + UptimeRobot
+  startHealthServer();
 
   // Ensure DB connection works before we start polling
   const db = getDb();
