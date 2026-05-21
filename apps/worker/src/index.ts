@@ -9,15 +9,36 @@ import { resolveOnEvent } from './bet-resolver.ts';
 import { isHeavyTypecode } from '@airport-pong/shared';
 import { log } from './logger.ts';
 
-const POLL_INTERVAL_MS = Number(process.env.WORKER_POLL_INTERVAL_MS ?? 15_000);
+// 30s default keeps us at ~2880 calls/day, safely under OpenSky's ~4000/day
+// authenticated free-tier limit. Override via WORKER_POLL_INTERVAL_MS env.
+const POLL_INTERVAL_MS = Number(process.env.WORKER_POLL_INTERVAL_MS ?? 30_000);
+
+// 429 backoff state — exponential, capped at 30 minutes.
+let backoffMultiplier = 1;
+const MAX_BACKOFF_MULT = 60; // 30s * 60 = 30 min ceiling
+const resetBackoff = () => { backoffMultiplier = 1; };
+const grow429Backoff = () => {
+  backoffMultiplier = Math.min(MAX_BACKOFF_MULT, Math.max(2, backoffMultiplier * 2));
+};
+const currentInterval = () => POLL_INTERVAL_MS * backoffMultiplier;
 
 async function tick(detector: EventDetector) {
   const startMs = Date.now();
   let resp;
   try {
     resp = await fetchStatesInBbox();
+    resetBackoff();
   } catch (err) {
-    log.error('opensky fetch failed', { error: String(err) });
+    const msg = String(err);
+    if (msg.includes('429')) {
+      grow429Backoff();
+      log.warn('opensky 429 — backing off', {
+        nextIntervalMs: currentInterval(),
+        nextIntervalSec: Math.round(currentInterval() / 1000),
+      });
+    } else {
+      log.error('opensky fetch failed', { error: msg });
+    }
     return;
   }
   const fetchMs = Date.now() - startMs;
@@ -134,7 +155,7 @@ async function main() {
       log.error('tick threw', { error: String(err) });
     }
     const elapsed = Date.now() - tickStart;
-    const wait = Math.max(0, POLL_INTERVAL_MS - elapsed);
+    const wait = Math.max(0, currentInterval() - elapsed);
     await new Promise((r) => setTimeout(r, wait));
   }
 }
