@@ -12,6 +12,7 @@ import {
 } from '@airport-pong/shared';
 import { placeBet } from '../actions/place-bet';
 import type { ActiveBet } from './ActiveBets';
+import { BetTimer } from './BetTimer';
 
 type Pace = Record<AirportCode, number>;
 
@@ -446,6 +447,13 @@ function YourBets({ bets }: { bets: ActiveBet[] }) {
                   <span className={`apc apc-${apCode.toLowerCase()}`}>{apCode}</span>
                   <span className="yb-verb mono"> · {b.betType.replace(/_/g, ' ')}</span>
                 </div>
+                <BetTimer
+                  betType={b.betType as BetTypeKey}
+                  payload={b.betPayload}
+                  placedAt={b.placedAt}
+                  resolvedAt={b.resolvedAt}
+                  status={b.status}
+                />
               </div>
               <div className="yb-r mono">
                 <span className="yb-status">● OPEN</span>

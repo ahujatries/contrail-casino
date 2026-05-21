@@ -2797,3 +2797,192 @@ body::before {
   color: var(--bg-1);
   box-shadow: 0 1px 0 oklch(0.30 0.10 258 / 0.2);
 }
+
+/* ─── Bet timer line ─────────────────────────────────────── */
+.bet-timer {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-3);
+  letter-spacing: 0.02em;
+  margin-top: 2px;
+  flex-wrap: wrap;
+}
+.bet-timer .placed { color: var(--ink-3); }
+.bet-timer .resolved { color: var(--ink-2); }
+.bet-timer .resolves { color: var(--accent); }
+.bet-timer .resolves.imminent {
+  color: var(--warn);
+  font-weight: 700;
+  animation: pulse 1.6s ease-in-out infinite;
+}
+.bet-timer .dot { color: var(--ink-3); opacity: 0.5; }
+
+/* ─── Ticker: time prefix + alert slot ───────────────────── */
+.event-tape .alert-slot {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  background: var(--neg);
+  color: var(--bg-1);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  height: 100%;
+  border-right: 0.5px solid var(--line-soft);
+  animation: alert-pulse 1.2s ease-in-out infinite;
+}
+.event-tape .alert-slot.heavy {
+  background: var(--warn);
+}
+.event-tape .alert-slot .alert-tag {
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  font-weight: 800;
+  padding: 2px 6px;
+  background: oklch(0 0 0 / 0.18);
+  border-radius: 2px;
+}
+.event-tape .alert-slot .ap { color: var(--bg-1); font-weight: 700; }
+.event-tape .alert-slot .ev { color: var(--bg-1); opacity: 0.85; }
+.event-tape .alert-slot .cs { color: var(--bg-1); font-weight: 600; }
+.event-tape .alert-slot .t { color: oklch(1 0 0 / 0.7); }
+.event-tape .alert-slot .heavy {
+  background: var(--bg-1);
+  color: var(--warn);
+  border-color: var(--bg-1);
+  font-weight: 700;
+}
+@keyframes alert-pulse {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.15); }
+}
+.tape-track-wrap.paused .tape-track {
+  animation-play-state: paused;
+}
+.tape-event .t {
+  color: var(--ink-3);
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  margin-right: 6px;
+}
+[data-theme="light"] .event-tape .alert-slot {
+  color: var(--bg-1);
+}
+[data-theme="light"] .event-tape .alert-slot .ap,
+[data-theme="light"] .event-tape .alert-slot .ev,
+[data-theme="light"] .event-tape .alert-slot .cs {
+  color: var(--bg-1);
+}
+.tape-event.fresh {
+  animation: tape-flash 4s ease-out forwards;
+}
+@keyframes tape-flash {
+  0% { background: var(--neg); color: var(--bg-1); padding: 2px 6px; }
+  100% { background: transparent; padding: 0; }
+}
+
+/* ─── Active bets row tweaks for BetTimer placement ─── */
+.active-bet-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 12px;
+  background: var(--bg-1);
+  border: 0.5px solid var(--line-soft);
+  border-radius: 2px;
+}
+.active-bet-row .ab-line {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+}
+.active-bet-row .ab-label { font-size: 12.5px; color: var(--ink-1); line-height: 1.3; }
+.active-bet-row .ab-money {
+  display: flex; justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+  margin-top: 4px;
+}
+.active-bet-row .ab-dot {
+  display: inline-block;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+/* ─── ActiveBets pills + container ───────────────────────── */
+.ds-active-bets {
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  padding: 14px 16px;
+}
+.ab-pill {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  font-weight: 700;
+  padding: 3px 7px;
+  border-radius: 2px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.ab-pill.open { background: var(--bg-2); color: var(--warn); }
+.ab-pill.open .ab-pip {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--warn);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+.ab-pill.won { background: var(--pos); color: var(--bg-1); }
+.ab-pill.lost { background: var(--bg-2); color: var(--neg); }
+.ab-pill.push { background: var(--bg-2); color: var(--ink-3); }
+.active-bet-row.won { border-color: color-mix(in oklab, var(--pos) 30%, var(--line-soft)); }
+.active-bet-row.lost { opacity: 0.5; }
+
+[data-theme="light"] .ab-pill.won { background: var(--pos); color: var(--bg-1); }
+
+/* ─── News slot in ticker (hour rollover + heavy alerts) ── */
+.event-tape .news-slot {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px;
+  background: var(--accent);
+  color: var(--bg-1);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 700;
+  height: 100%;
+  border-right: 0.5px solid var(--line-soft);
+  animation: alert-pulse 1.5s ease-in-out infinite;
+  letter-spacing: 0.04em;
+}
+.event-tape .news-slot.alert {
+  background: var(--warn);
+  color: var(--bg-0);
+}
+.event-tape .news-slot .alert-tag {
+  font-size: 9.5px;
+  letter-spacing: 0.2em;
+  font-weight: 900;
+  padding: 2px 6px;
+  background: oklch(0 0 0 / 0.18);
+  border-radius: 2px;
+}
+.event-tape .news-slot .news-text { white-space: nowrap; }
+
+[data-theme="light"] .event-tape .news-slot {
+  background: var(--blue-1);
+  color: var(--bg-1);
+}
+[data-theme="light"] .event-tape .news-slot.alert {
+  background: var(--warn);
+  color: var(--bg-0);
+}
