@@ -113,6 +113,14 @@ export const liveAircraft = pgTable(
     headingDeg: integer('heading_deg'),
     verticalRateFpm: integer('vertical_rate_fpm'),
     onGround: boolean('on_ground').notNull().default(false),
+    /**
+     * When this plane was first observed as actively taxiing at the
+     * current nearestAirport (onGround=true, velocity in [3, 35] kt).
+     * Cleared when the plane goes airborne or transitions out of taxi
+     * range. Used to compute time-to-takeoff (ETT) for the per-plane
+     * takeoff O/U bet: ETT = airportAvgTaxiOut − minutesElapsed.
+     */
+    taxiStartedAt: timestamp('taxi_started_at', { withTimezone: true }),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({

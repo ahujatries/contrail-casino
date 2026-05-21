@@ -1,0 +1,1 @@
+ALTER TABLE "live_aircraft" ADD COLUMN "taxi_started_at" timestamp with time zone;

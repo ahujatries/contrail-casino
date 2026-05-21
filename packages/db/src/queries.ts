@@ -989,12 +989,33 @@ export type DepartingPlane = {
 export const DEPARTING_BET_MIN_ETT_MIN = 4;
 
 /**
+ * FAA Bureau of Transportation Statistics average taxi-out times by
+ * airport (rolling 12-month, ~2025 data). These are the dominant signal
+ * for ETT prediction: a plane that's been taxiing 20 min at JFK is much
+ * closer to wheels-up than one that just pushed back, regardless of
+ * current ground speed.
+ */
+const AVG_TAXI_OUT_MIN: Record<AirportCode, number> = {
+  JFK: 26,
+  ORD: 21,
+  ATL: 18,
+  LAX: 21,
+};
+
+/**
  * All planes currently taxiing at an airport — on ground, moving but not
- * fast enough to be in the takeoff roll. ETT is a heuristic: faster taxi
- * speed → closer to runway → sooner takeoff. Rough but honest about it.
+ * fast enough to be in the takeoff roll. ETT comes from two signals:
  *
- * Bets close (plane drops off the list) once ETT ≤ DEPARTING_BET_MIN_ETT_MIN,
- * so users aren't betting on a plane that's seconds from rotation.
+ *   Primary (when taxi_started_at is known): elapsed taxi time vs. the
+ *   FAA airport average. ETT = max(2, avgTaxiOut − minutesElapsed). This
+ *   captures the real-world signal: queueing + wake separation + runway
+ *   distance all wash out into "average minutes from pushback to wheels-up".
+ *
+ *   Fallback (taxi_started_at null — plane was already taxiing when worker
+ *   first observed it): velocity-based heuristic. Faster taxi → closer to
+ *   runway → sooner takeoff. Less accurate; gives reasonable line.
+ *
+ * Bets close (plane drops off the list) once ETT ≤ DEPARTING_BET_MIN_ETT_MIN.
  */
 export const getDepartingPlanesForAirport = async (
   airport: AirportCode
@@ -1010,6 +1031,8 @@ export const getDepartingPlanesForAirport = async (
       )
     );
 
+  const avgTaxiOut = AVG_TAXI_OUT_MIN[airport];
+  const now = Date.now();
   const out: DepartingPlane[] = [];
   for (const r of rows) {
     if (r.velocityKt == null || r.latitude == null || r.longitude == null) continue;
@@ -1017,10 +1040,20 @@ export const getDepartingPlanesForAirport = async (
     // is likely in the takeoff roll — already too late to bet.
     if (r.velocityKt < 3 || r.velocityKt > 35) continue;
 
-    // Heuristic ETT: faster taxi → closer to runway threshold → sooner
-    // wheels-up. At 30kt assume ~3 min to roll; at 5kt assume ~12 min.
-    // Clamp to [4, 15] so we always show meaningful + bettable lines.
-    const ettMin = Math.max(4, Math.min(15, Math.round(15 - r.velocityKt * 0.35)));
+    let ettMin: number;
+    if (r.taxiStartedAt) {
+      // PRIMARY: use elapsed taxi time vs airport average.
+      const elapsedMin = (now - r.taxiStartedAt.getTime()) / 60_000;
+      ettMin = Math.max(2, Math.round(avgTaxiOut - elapsedMin));
+      // Cap pathologically-old taxi rows: if elapsed > 2× avg, plane
+      // has likely been parked at gate or stuck in a long delay queue;
+      // line gets ambiguous. Show as "imminent" so users can still bet.
+      if (elapsedMin > avgTaxiOut * 2) ettMin = DEPARTING_BET_MIN_ETT_MIN + 2;
+    } else {
+      // FALLBACK: velocity-only heuristic. Faster = closer to runway.
+      ettMin = Math.max(4, Math.min(15, Math.round(15 - r.velocityKt * 0.35)));
+    }
+
     if (ettMin <= DEPARTING_BET_MIN_ETT_MIN) continue;
 
     out.push({
@@ -1033,7 +1066,7 @@ export const getDepartingPlanesForAirport = async (
       velocityKt: r.velocityKt,
       headingDeg: r.headingDeg,
       ettMin,
-      expectedTakeoffAt: new Date(Date.now() + ettMin * 60_000).toISOString(),
+      expectedTakeoffAt: new Date(now + ettMin * 60_000).toISOString(),
     });
   }
   out.sort((a, b) => a.ettMin - b.ettMin);

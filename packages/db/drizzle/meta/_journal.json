@@ -15,6 +15,13 @@
       "when": 1779336795439,
       "tag": "0001_funny_random",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1779390765421,
+      "tag": "0002_moaning_marauders",
+      "breakpoints": true
     }
   ]
 }
