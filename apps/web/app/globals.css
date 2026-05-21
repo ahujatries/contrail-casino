@@ -3085,3 +3085,107 @@ body::before {
   font-variant-numeric: tabular-nums;
   font-weight: 700;
 }
+
+/* ─── Dual-map tracker pane (one map per featured airport) ─── */
+.trk-dual {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.trk-cell {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 240px;
+  border-bottom: 1px solid var(--line);
+  overflow: hidden;
+  position: relative;
+}
+.trk-cell:last-child { border-bottom: 0; }
+.trk-cell.airport-jfk { --tc: var(--jfk); }
+.trk-cell.airport-ord { --tc: var(--ord); }
+.trk-cell.airport-atl { --tc: var(--atl); }
+.trk-cell.airport-lax { --tc: var(--lax); }
+
+.trk-cell-head {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: var(--bg-1);
+  border-bottom: 1px solid var(--line-soft);
+  position: relative;
+}
+.trk-cell-head::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  background: var(--tc);
+}
+.trk-cell-left {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.trk-cell-led {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--tc);
+  align-self: center;
+}
+.trk-cell-code {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+  color: var(--ink-0);
+}
+.trk-cell-name {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-3);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.trk-cell-right {
+  display: flex;
+  gap: 12px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+.trk-cell-right .k { color: var(--ink-3); font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 700; }
+.trk-cell-right .v { color: var(--ink-0); font-variant-numeric: tabular-nums; font-weight: 700; }
+
+.trk-cell-map {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-2);
+}
+.trk-cell-map > .ft-wrap {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.trk-cell-map .map-canvas {
+  flex: 1;
+  min-height: 180px;
+  width: 100%;
+  height: auto;
+}
+.trk-cell-map .ft-tele {
+  flex-shrink: 0;
+  padding: 6px 10px;
+}
+.trk-cell-map .ft-cell {
+  padding: 0 8px;
+}
+.trk-cell-map .ft-cell .v { font-size: 11px; }
+.trk-cell-map .ft-cell .k { font-size: 8.5px; }

@@ -1,7 +1,7 @@
 'use client';
 
 import { MapTracker } from './MapTracker';
-import { type AirportCode } from '@airport-pong/shared';
+import { AIRPORT_NAMES, type AirportCode } from '@airport-pong/shared';
 
 export type TrackerFlight = {
   a1: AirportCode;
@@ -22,7 +22,6 @@ const ACCENT: Record<AirportCode, string> = {
 };
 
 export function TrackerPane({ flight }: { flight: TrackerFlight }) {
-  // Pick the first featured airport for the map center (toggle later if needed)
   return (
     <aside className="stage-tracker">
       <div className="trk-head">
@@ -31,18 +30,25 @@ export function TrackerPane({ flight }: { flight: TrackerFlight }) {
           {flight.a1} <span>·</span> {flight.a2} <span>·</span> APPROACH WINDOW
         </div>
       </div>
-      <div className="trk-canvas has-map" style={{ position: 'relative' }}>
-        <MapTracker airport={flight.a1} accent={ACCENT[flight.a1]} featured={null} />
-      </div>
-      <div className="trk-foot">
-        <Strip airport={flight.a1} pace={flight.aPace} takeoffs={flight.aTakeoffs} landings={flight.aLandings} />
-        <Strip airport={flight.a2} pace={flight.bPace} takeoffs={flight.bTakeoffs} landings={flight.bLandings} />
+      <div className="trk-dual">
+        <TrackerCell
+          airport={flight.a1}
+          pace={flight.aPace}
+          takeoffs={flight.aTakeoffs}
+          landings={flight.aLandings}
+        />
+        <TrackerCell
+          airport={flight.a2}
+          pace={flight.bPace}
+          takeoffs={flight.bTakeoffs}
+          landings={flight.bLandings}
+        />
       </div>
     </aside>
   );
 }
 
-function Strip({
+function TrackerCell({
   airport,
   pace,
   takeoffs,
@@ -54,21 +60,27 @@ function Strip({
   landings: number;
 }) {
   return (
-    <div className={`trk-strip airport-${airport.toLowerCase()}`}>
-      <div className="trk-strip-head">
-        <span className="led" />
-        <span className="code">{airport}</span>
+    <div className={`trk-cell airport-${airport.toLowerCase()}`}>
+      <div className="trk-cell-head">
+        <div className="trk-cell-left">
+          <span className="trk-cell-led" />
+          <span className="trk-cell-code">{airport}</span>
+          <span className="trk-cell-name">{AIRPORT_NAMES[airport].replace(/\s*\(.*\)\s*/, '')}</span>
+        </div>
+        <div className="trk-cell-right mono">
+          <span>
+            <span className="k">TO</span> <span className="v">{takeoffs}</span>
+          </span>
+          <span>
+            <span className="k">LDG</span> <span className="v">{landings}</span>
+          </span>
+          <span>
+            <span className="k">PACE</span> <span className="v">{Math.round(pace)}/h</span>
+          </span>
+        </div>
       </div>
-      <div className="trk-strip-row mono">
-        <span>
-          <span className="k">TO</span> <span className="v">{takeoffs}</span>
-        </span>
-        <span>
-          <span className="k">LDG</span> <span className="v">{landings}</span>
-        </span>
-        <span>
-          <span className="k">PACE</span> <span className="v">{Math.round(pace)}/h</span>
-        </span>
+      <div className="trk-cell-map">
+        <MapTracker airport={airport} accent={ACCENT[airport]} featured={null} />
       </div>
     </div>
   );
