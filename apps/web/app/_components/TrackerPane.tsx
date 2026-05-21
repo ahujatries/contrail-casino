@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { MapTracker, type Aircraft } from './MapTracker';
+import { AtcPlayer } from './AtcPlayer';
 import { AIRPORT_NAMES, type AirportCode } from '@airport-pong/shared';
 
 type FeaturedPlane = {
@@ -102,6 +103,8 @@ export function TrackerPane({
           }
         />
       </div>
+
+      <AtcPlayer airport={airport} mode={mode} accent={ACCENT[airport]} />
 
       <div className="trk-footer mono">
         <span>{AIRPORT_NAMES[airport].replace(/\s*\(.*\)\s*/, '')}</span>

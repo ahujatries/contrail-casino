@@ -3357,3 +3357,98 @@ body::before {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
+
+/* ─── ATC live audio player ─── */
+.atc-player {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--bg-2);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line-soft);
+  font-family: var(--font-mono);
+  flex-wrap: wrap;
+}
+.atc-btn {
+  appearance: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--bg-1);
+  color: var(--ink-0);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 120ms, color 120ms;
+}
+.atc-btn:hover { background: var(--bg-3); }
+.atc-label {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--ink-1);
+  letter-spacing: 0.08em;
+}
+.atc-ap {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 13px;
+  letter-spacing: -0.01em;
+}
+.atc-divider { color: var(--ink-3); }
+.atc-live {
+  color: var(--pos);
+  font-weight: 700;
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  animation: pulse 1.4s ease-in-out infinite;
+  margin-left: 4px;
+}
+.atc-freqs {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+.atc-freq {
+  appearance: none;
+  background: var(--bg-1);
+  border: 1px solid var(--line-soft);
+  border-radius: 2px;
+  padding: 4px 8px;
+  font: 700 10px/1 var(--font-mono);
+  color: var(--ink-2);
+  cursor: pointer;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.atc-freq:hover { color: var(--ink-0); }
+.atc-freq.on {
+  background: var(--bg-1);
+  color: var(--ink-0);
+}
+.atc-vol {
+  width: 64px;
+  accent-color: var(--accent);
+}
+.atc-err {
+  font-size: 9.5px;
+  color: var(--neg);
+  letter-spacing: 0.14em;
+  font-weight: 700;
+}
+[data-theme="light"] .atc-player {
+  background: var(--bg-2);
+  border-top: 1px solid var(--blue-1);
+  border-bottom: 1px solid var(--line-soft);
+}
+[data-theme="light"] .atc-freq.on {
+  background: var(--blue-1);
+  color: var(--bg-1) !important;
+  border-color: var(--blue-1);
+}
