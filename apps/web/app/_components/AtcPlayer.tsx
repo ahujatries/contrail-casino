@@ -39,7 +39,7 @@ export function AtcPlayer({ airport, mode, accent }: Props) {
 
   const feed = ATC_FEEDS[airport];
   const slug = feed[freq] ?? feed.twr ?? '';
-  const url = slug ? atcStreamUrl(slug) : '';
+  const url = slug ? atcStreamUrl(slug, airport) : '';
 
   // Pause when airport / freq changes (browser quirk: src change requires reload)
   useEffect(() => {
@@ -142,7 +142,8 @@ export function AtcPlayer({ airport, mode, accent }: Props) {
         ref={audioRef}
         src={url}
         preload="none"
-        crossOrigin="anonymous"
+        // No crossOrigin: LiveATC doesn't send CORS headers, and we don't
+        // need to read the audio buffer — just play it.
         onError={() => {
           setError('stream error — try another freq');
           setPlaying(false);

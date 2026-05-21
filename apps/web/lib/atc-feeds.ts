@@ -23,8 +23,24 @@ export const ATC_FEEDS: Record<AirportCode, Partial<Record<AtcFreq, string>>> = 
   LAX: { twr: 'klax_twr', gnd: 'klax_gnd', app: 'klax_app' },
 };
 
-export const atcStreamUrl = (slug: string) =>
-  `https://s1-bos.liveatc.net/${slug}`;
+/**
+ * LiveATC distributes streams across regional edge servers. Most east-coast
+ * and midwest feeds live on s1-bos; LAX and some others live on s1-fmt2 or
+ * s1-tab. If a stream comes up silent or 404s, find the right server by
+ * opening https://www.liveatc.net/search/?icao=<ICAO>, clicking the feed,
+ * and copying the hostname from the .pls/.m3u file LiveATC serves.
+ */
+const ATC_SERVER_BY_AIRPORT: Record<AirportCode, string> = {
+  JFK: 's1-bos',
+  ORD: 's1-bos',
+  ATL: 's1-bos',
+  LAX: 's1-fmt2',
+};
+
+export const atcStreamUrl = (slug: string, airport?: AirportCode) => {
+  const server = airport ? ATC_SERVER_BY_AIRPORT[airport] : 's1-bos';
+  return `https://${server}.liveatc.net/${slug}`;
+};
 
 /** Suggest the most useful freq based on the bet mode. */
 export const suggestedFreq = (mode: 'takeoff' | 'landing' | 'hour'): AtcFreq => {
