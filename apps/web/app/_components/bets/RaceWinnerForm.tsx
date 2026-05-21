@@ -45,10 +45,12 @@ export function RaceWinnerForm({
 }) {
   const [race, setRace] = useState<RaceType>('takeoff');
   const [picked, setPicked] = useState<AirportCode>('JFK');
-  const [minsLeft, setMinsLeft] = useState(() => Math.max(1, Math.round(msUntilNextHour() / 60_000)));
-
+  // SSR-safe: start with a stable fallback (60) and snap to real value after mount
+  const [minsLeft, setMinsLeft] = useState(60);
   useEffect(() => {
-    const id = setInterval(() => setMinsLeft(Math.max(1, Math.round(msUntilNextHour() / 60_000))), 30_000);
+    const update = () => setMinsLeft(Math.max(1, Math.round(msUntilNextHour() / 60_000)));
+    update();
+    const id = setInterval(update, 30_000);
     return () => clearInterval(id);
   }, []);
 

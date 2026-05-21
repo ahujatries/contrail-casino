@@ -41,10 +41,11 @@ export function RaceOuForm({
   const [race, setRace] = useState<RaceType>('takeoff');
   const [airport, setAirport] = useState<AirportCode>('JFK');
   const [side, setSide] = useState<'over' | 'under'>('over');
-  const [minsLeft, setMinsLeft] = useState(() => Math.max(1, Math.round(msUntilNextHour() / 60_000)));
-
+  const [minsLeft, setMinsLeft] = useState(60);
   useEffect(() => {
-    const id = setInterval(() => setMinsLeft(Math.max(1, Math.round(msUntilNextHour() / 60_000))), 30_000);
+    const update = () => setMinsLeft(Math.max(1, Math.round(msUntilNextHour() / 60_000)));
+    update();
+    const id = setInterval(update, 30_000);
     return () => clearInterval(id);
   }, []);
 

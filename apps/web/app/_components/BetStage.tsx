@@ -64,16 +64,21 @@ export function BetStage({
   const pickedKey: AirportCode = side === 'a' ? a1 : a2;
   const oppKey: AirportCode = side === 'a' ? a2 : a1;
 
-  const [minsLeft, setMinsLeft] = useState(() => Math.max(1, Math.round(msUntilNextHour() / 60_000)));
-  const [secsLeft, setSecsLeft] = useState(() => 59 - new Date().getUTCSeconds());
+  // Clock initialized post-hydration so SSR / client first render agree
+  const [hourClock, setHourClock] = useState<{ mins: number; secs: number } | null>(null);
   useEffect(() => {
-    const id = setInterval(() => {
+    const update = () => {
       const ms = msUntilNextHour();
-      setMinsLeft(Math.max(0, Math.floor(ms / 60_000)));
-      setSecsLeft(Math.max(0, Math.floor((ms / 1000) % 60)));
-    }, 1000);
+      setHourClock({
+        mins: Math.max(0, Math.floor(ms / 60_000)),
+        secs: Math.max(0, Math.floor((ms / 1000) % 60)),
+      });
+    };
+    update();
+    const id = setInterval(update, 1000);
     return () => clearInterval(id);
   }, []);
+  const minsLeft = hourClock?.mins ?? 0;
 
   const { oA, oB } = useMemo(() => odds(a1, a2, mode, scores, pace), [a1, a2, mode, scores, pace]);
   const currentOdds = side === 'a' ? oA : oB;
@@ -173,8 +178,10 @@ export function BetStage({
             <div className="mid-clock mono">
               ENDS IN
               <br />
-              <span>
-                {String(minsLeft).padStart(2, '0')}:{String(secsLeft).padStart(2, '0')}
+              <span suppressHydrationWarning>
+                {hourClock
+                  ? `${String(hourClock.mins).padStart(2, '0')}:${String(hourClock.secs).padStart(2, '0')}`
+                  : '--:--'}
               </span>
             </div>
           ) : (

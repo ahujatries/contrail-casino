@@ -17,11 +17,18 @@ type Props = {
  * Settled:   "placed 3m ago · resolved 1m ago"
  */
 export function BetTimer({ betType, payload, placedAt, resolvedAt, status }: Props) {
-  const [now, setNow] = useState(() => Date.now());
+  // Defer all clock-derived rendering until after hydration so SSR and the
+  // first client render don't disagree.
+  const [now, setNow] = useState<number | null>(null);
   useEffect(() => {
+    setNow(Date.now());
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, []);
+
+  if (now == null) {
+    return <span className="bet-timer" suppressHydrationWarning />;
+  }
 
   const placedAgo = formatAgo(now - new Date(placedAt).getTime());
 
