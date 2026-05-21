@@ -38,8 +38,21 @@ export function AtcPlayer({ airport, mode, accent }: Props) {
   }, [mode]);
 
   const feed = ATC_FEEDS[airport];
-  const slug = feed[freq] ?? feed.twr ?? '';
-  const url = slug ? atcStreamUrl(slug, airport) : '';
+  const availableFreqs = (['gnd', 'twr', 'app'] as AtcFreq[]).filter((f) => !!feed[f]);
+  const noFeeds = availableFreqs.length === 0;
+
+  // If the currently-selected freq isn't available for this airport,
+  // fall back to the first one that IS. Prevents an empty URL when the
+  // suggested freq (e.g. 'app') doesn't exist for this airport.
+  useEffect(() => {
+    if (!noFeeds && !feed[freq]) {
+      setFreq(availableFreqs[0]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [airport, noFeeds]);
+
+  const slug = feed[freq] ?? feed.twr ?? feed.gnd ?? '';
+  const url = slug ? atcStreamUrl(slug) : '';
 
   // Pause when airport / freq changes (browser quirk: src change requires reload)
   useEffect(() => {
@@ -77,6 +90,28 @@ export function AtcPlayer({ airport, mode, accent }: Props) {
         });
     }
   };
+
+  // Airport has no LiveATC feed configured (e.g., KORD)
+  if (noFeeds) {
+    return (
+      <div className="atc-player na">
+        <span className="atc-label mono">
+          <span className="atc-ap" style={{ color: accent }}>{airport}</span>
+          <span className="atc-divider">·</span>
+          <span>ATC NOT AVAILABLE</span>
+        </span>
+        <a
+          className="atc-na-link mono"
+          href={`https://www.liveatc.net/search/?icao=k${airport.toLowerCase()}`}
+          target="_blank"
+          rel="noreferrer"
+          title="Find this airport on LiveATC.net"
+        >
+          LIVEATC.NET ↗
+        </a>
+      </div>
+    );
+  }
 
   return (
     <div className={`atc-player ${playing ? 'on' : ''}`}>

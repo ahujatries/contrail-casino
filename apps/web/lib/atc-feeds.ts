@@ -1,11 +1,23 @@
 import type { AirportCode } from '@airport-pong/shared';
 
 /**
- * LiveATC.net stream slugs per airport. Direct AAC stream URL is
- * https://d.liveatc.net/<slug>. These feeds are run by volunteers so they
- * occasionally go offline; the UI shows an error gracefully if a stream 404s.
+ * LiveATC.net stream slugs per airport. We hit `https://d.liveatc.net/<slug>`
+ * — that's their load balancer, which 302-redirects to the correct edge
+ * server (s1-bos, s1-fmt2, etc.) per slug. Saves us from hardcoding a
+ * per-airport server map that goes stale.
  *
- * Listen on web: https://www.liveatc.net/search/?icao=<ICAO>
+ * Empirical truth (probed 2026-05-21):
+ *   - twr + gnd for JFK / ATL / LAX → 200, audio/mpeg
+ *   - all 'app' (TRACON/approach) slugs we tried → 404
+ *   - all KORD slugs we tried → 404
+ *
+ * So this map only includes the freqs that actually serve audio. The
+ * AtcPlayer's freq selector filters to `feed[freq] != null`, so empty
+ * entries just hide buttons. KORD shows an "ATC not available" state.
+ *
+ * To add a freq: find the real slug from LiveATC's site (the Cloudflare
+ * challenge blocks scraping, so look it up manually), then add it here.
+ * Listen via the right .pls file to confirm before committing.
  */
 export type AtcFreq = 'twr' | 'gnd' | 'app';
 
@@ -16,35 +28,25 @@ export const ATC_FREQ_LABEL: Record<AtcFreq, string> = {
 };
 
 export const ATC_FEEDS: Record<AirportCode, Partial<Record<AtcFreq, string>>> = {
-  // Standard LiveATC.net slugs. If a stream is dead, swap the slug here.
-  JFK: { twr: 'kjfk_twr', gnd: 'kjfk_gnd', app: 'kjfk_app' },
-  ORD: { twr: 'kord_twr', gnd: 'kord_gnd', app: 'kord_app' },
-  ATL: { twr: 'katl_twr', gnd: 'katl_gnd', app: 'katl_app' },
-  LAX: { twr: 'klax_twr', gnd: 'klax_gnd', app: 'klax_app' },
+  JFK: { twr: 'kjfk_twr', gnd: 'kjfk_gnd' },
+  ATL: { twr: 'katl_twr', gnd: 'katl_gnd' },
+  LAX: { twr: 'klax_twr', gnd: 'klax_gnd' },
+  // KORD: no LiveATC slugs currently working at the standard names.
+  // Tower/Ground/Approach all 404 on both s1-bos and s1-fmt2 as of
+  // 2026-05-21. Find the real slug via liveatc.net/search/?icao=kord
+  // and add it here.
+  ORD: {},
 };
+
+export const atcStreamUrl = (slug: string) =>
+  `https://d.liveatc.net/${slug}`;
 
 /**
- * LiveATC distributes streams across regional edge servers. Most east-coast
- * and midwest feeds live on s1-bos; LAX and some others live on s1-fmt2 or
- * s1-tab. If a stream comes up silent or 404s, find the right server by
- * opening https://www.liveatc.net/search/?icao=<ICAO>, clicking the feed,
- * and copying the hostname from the .pls/.m3u file LiveATC serves.
+ * Suggest the most useful freq based on the bet mode. Defaults to 'twr'
+ * since TRACON ('app') slugs are inconsistent on LiveATC and most often
+ * unavailable; tower is the universal fallback that always has coverage.
  */
-const ATC_SERVER_BY_AIRPORT: Record<AirportCode, string> = {
-  JFK: 's1-bos',
-  ORD: 's1-bos',
-  ATL: 's1-bos',
-  LAX: 's1-fmt2',
-};
-
-export const atcStreamUrl = (slug: string, airport?: AirportCode) => {
-  const server = airport ? ATC_SERVER_BY_AIRPORT[airport] : 's1-bos';
-  return `https://${server}.liveatc.net/${slug}`;
-};
-
-/** Suggest the most useful freq based on the bet mode. */
 export const suggestedFreq = (mode: 'takeoff' | 'landing' | 'hour'): AtcFreq => {
   if (mode === 'takeoff') return 'gnd';
-  if (mode === 'landing') return 'app';
   return 'twr';
 };
