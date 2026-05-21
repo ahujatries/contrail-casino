@@ -1,42 +1,37 @@
-import { eq } from 'drizzle-orm';
-import {
-  getCurrentHourScores,
-  getDb,
-  getNextLandingForAirport,
-  getNextTakeoffForAirport,
-  getPaceByAirport,
-  liveAircraft,
-} from '@airport-pong/db';
-import { AIRPORT_CODES, AIRPORT_NAMES, type AirportCode } from '@airport-pong/shared';
 import { getCurrentUser } from '../../lib/session';
 import { TopBar } from '../_components/TopBar';
-import { MapTracker, type Aircraft } from '../_components/MapTracker';
+import {
+  getCurrentHourScores,
+  getDepartingPlanesForAirport,
+  getHourlyLineForAirport,
+  getInboundPlanesForAirport,
+  getDb,
+  liveAircraft,
+} from '@airport-pong/db';
+import { eq } from 'drizzle-orm';
+import { AIRPORT_CODES, getCurrentHourStart, type AirportCode } from '@airport-pong/shared';
+import { TrackerScreenV2 } from './_components/TrackerScreenV2';
+import type { Aircraft } from '../_components/MapTracker';
 
 export const dynamic = 'force-dynamic';
+export const metadata = { title: 'Airport Pong · Tracker' };
 
-const ACCENT: Record<AirportCode, string> = {
-  JFK: 'oklch(0.42 0.20 258)',
-  ORD: 'oklch(0.52 0.20 32)',
-  ATL: 'oklch(0.50 0.13 175)',
-  LAX: 'oklch(0.45 0.16 305)',
-};
-
-export const metadata = {
-  title: 'Contrail Casino · Tracker',
-};
+const DEFAULT_AIRPORT: AirportCode = AIRPORT_CODES[0];
 
 export default async function TrackerPage() {
-  const focusAirport: AirportCode = AIRPORT_CODES[0];
+  const user = await getCurrentUser();
+  const now = new Date();
+  const hourStart = getCurrentHourStart(now);
   const db = getDb();
-  const [user, scores, takeoffPace, takeoff, landing, trafficRows] = await Promise.all([
-    getCurrentUser(),
-    getCurrentHourScores(),
-    getPaceByAirport(30, 'takeoff'),
-    getNextTakeoffForAirport(focusAirport),
-    getNextLandingForAirport(focusAirport),
-    db.select().from(liveAircraft).where(eq(liveAircraft.nearestAirport, focusAirport)),
+
+  const [scores, line, inbound, departing, trafficRows] = await Promise.all([
+    getCurrentHourScores(now),
+    getHourlyLineForAirport(DEFAULT_AIRPORT, hourStart),
+    getInboundPlanesForAirport(DEFAULT_AIRPORT),
+    getDepartingPlanesForAirport(DEFAULT_AIRPORT),
+    db.select().from(liveAircraft).where(eq(liveAircraft.nearestAirport, DEFAULT_AIRPORT)),
   ]);
-  const featured = takeoff ?? landing ?? null;
+
   const traffic: Aircraft[] = trafficRows.map((r) => ({
     icao24: r.icao24,
     callsign: r.callsign,
@@ -51,80 +46,30 @@ export default async function TrackerPage() {
     updatedAt: r.updatedAt.toISOString(),
   }));
 
+  if (!user) {
+    return (
+      <main className="screen"><div className="screen-inner">
+        Setting up your callsign… refresh the page.
+      </div></main>
+    );
+  }
+
   return (
     <div className="app" data-route="tracker">
-      <TopBar callsign={user?.callsign ?? '—'} balance={user?.balance ?? 0} active="tracker" />
-      <main className="screen screen-tracker-full">
-        <div className="screen-inner">
-          <div className="screen-head">
-            <div>
-              <div className="micro mono screen-kicker">LIVE · UPDATES EVERY 15 SECONDS</div>
-              <h1 className="screen-title">Live Tracker</h1>
-              <p className="screen-sub">
-                Aircraft movements across the four tracked airports. Map below shows JFK
-                live; rotate via the strip header.
-              </p>
-            </div>
-          </div>
-
-          <div className="tracker-strip">
-            {AIRPORT_CODES.map((c) => {
-              const t = scores.takeoff[c];
-              const ops = scores.total_ops[c];
-              const heavy = scores.heavy[c];
-              const ldg = Math.max(0, ops - t);
-              return (
-                <div key={c} className={`ts-cell airport-${c.toLowerCase()}`}>
-                  <div className="ts-head">
-                    <span className="ts-led" />
-                    <span className="ts-code">{c}</span>
-                    <span className="ts-name mono">{AIRPORT_NAMES[c].replace(/\s*\(.*\)\s*/, '')}</span>
-                  </div>
-                  <div className="ts-stats">
-                    <div>
-                      <span className="k mono">TO</span>
-                      <span className="v">{t}</span>
-                    </div>
-                    <div>
-                      <span className="k mono">LDG</span>
-                      <span className="v">{ldg}</span>
-                    </div>
-                    <div>
-                      <span className="k mono">HVY</span>
-                      <span className="v">{heavy}</span>
-                    </div>
-                    <div>
-                      <span className="k mono">OPS</span>
-                      <span className="v">{ops}</span>
-                    </div>
-                    <div>
-                      <span className="k mono">PACE</span>
-                      <span className="v">
-                        {Math.round(takeoffPace[c])}
-                        <span className="u mono">/h</span>
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="tracker-big" style={{ minHeight: 520, padding: 0, position: 'relative' }}>
-            <div style={{ position: 'absolute', inset: 0 }}>
-              <MapTracker
-                airport={focusAirport}
-                accent={ACCENT[focusAirport]}
-                aircraft={traffic}
-                followIcao24={featured?.icao24 ?? null}
-                featured={featured ? { callsign: featured.callsign, typecode: featured.typecode, isHeavy: featured.isHeavy } : null}
-                ageSec={null}
-              />
-            </div>
-          </div>
-        </div>
-      </main>
-      <footer style={{ height: 44, borderTop: '0.5px solid var(--line)', background: 'var(--bg-1)' }} />
+      <TopBar callsign={user.callsign} balance={user.balance} active="tracker" />
+      <TrackerScreenV2
+        initialAirport={DEFAULT_AIRPORT}
+        initialScores={{
+          jfk: { takeoff: scores.takeoff.JFK ?? 0, totalOps: scores.total_ops.JFK ?? 0 },
+          ord: { takeoff: scores.takeoff.ORD ?? 0, totalOps: scores.total_ops.ORD ?? 0 },
+          atl: { takeoff: scores.takeoff.ATL ?? 0, totalOps: scores.total_ops.ATL ?? 0 },
+          lax: { takeoff: scores.takeoff.LAX ?? 0, totalOps: scores.total_ops.LAX ?? 0 },
+        }}
+        initialLine={line.line}
+        initialTraffic={traffic}
+        initialInbound={inbound}
+        initialDeparting={departing}
+      />
     </div>
   );
 }
