@@ -2986,3 +2986,102 @@ body::before {
   background: var(--warn);
   color: var(--bg-0);
 }
+
+/* ─── Tracker pane: when map is present, override the placeholder layout ─── */
+.trk-canvas.has-map {
+  padding: 0;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  justify-content: stretch !important;
+  background: var(--bg-2);
+  overflow: hidden;
+}
+.trk-canvas.has-map::before { display: none !important; }
+.trk-canvas.has-map > .ft-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+/* ─── FlightTracker / MapTracker inner layout (lost in v2 reskin) ─── */
+.ft-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+.ft-svg {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  display: block;
+}
+.map-canvas {
+  flex: 1 1 auto;
+  width: 100%;
+  height: auto;
+  min-height: 280px;
+  background: oklch(0.08 0.012 250);
+}
+.ft-tele {
+  flex-shrink: 0;
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  padding: 8px 10px;
+  border-top: 1px solid var(--line);
+  background: var(--bg-1);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  overflow-x: auto;
+}
+.ft-tele::-webkit-scrollbar { display: none; }
+.ft-cell {
+  display: flex;
+  flex-direction: column;
+  padding: 0 10px;
+  border-right: 1px solid var(--line-soft);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.ft-cell:first-child { padding-left: 0; }
+.ft-cell:last-child { border-right: 0; }
+.ft-cell .k {
+  font-size: 9px;
+  color: var(--ink-3);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-bottom: 2px;
+  font-weight: 700;
+}
+.ft-cell .v {
+  font-size: 12.5px;
+  color: var(--ink-0);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.ft-cell .u { color: var(--ink-3); font-size: 9.5px; font-weight: 500; margin-left: 2px; }
+.ft-cell .sep { color: var(--ink-3); margin: 0 1px; }
+.ft-prog {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding-left: 12px;
+  min-width: 60px;
+}
+.ft-prog-bar { height: 3px; background: var(--bg-2); border-radius: 999px; overflow: hidden; }
+.ft-prog-bar > i { display: block; height: 100%; border-radius: 999px; transition: width 0.4s ease; }
+.ft-prog-pct {
+  font-size: 10px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
