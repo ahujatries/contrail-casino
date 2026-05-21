@@ -1,0 +1,28 @@
+{
+  "name": "@airport-pong/db",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema.ts"
+  },
+  "scripts": {
+    "generate": "set -a && . ../../.env.local && set +a && drizzle-kit generate",
+    "migrate": "tsx --env-file=../../.env.local src/migrate.ts",
+    "push": "set -a && . ../../.env.local && set +a && drizzle-kit push",
+    "studio": "set -a && . ../../.env.local && set +a && drizzle-kit studio"
+  },
+  "dependencies": {
+    "@airport-pong/shared": "workspace:*",
+    "drizzle-orm": "^0.36.4",
+    "postgres": "^3.4.5"
+  },
+  "devDependencies": {
+    "drizzle-kit": "^0.28.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

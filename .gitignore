@@ -1,0 +1,25 @@
+node_modules/
+.next/
+.turbo/
+dist/
+build/
+out/
+
+.env
+.env.local
+.env.*.local
+!.env.example
+
+.DS_Store
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OpenSky aircraft DB cache (large CSV)
+.cache/
+aircraft-db.csv
+
+# Vercel
+.vercel
