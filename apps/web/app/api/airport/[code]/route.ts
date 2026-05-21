@@ -13,8 +13,10 @@ import {
   AIRPORT_CODES,
   getCurrentHourStart,
   msUntilNextHour,
+  raceOverUnderOdds,
   type AirportCode,
 } from '@airport-pong/shared';
+import { getPaceByAirport } from '@airport-pong/db';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -46,21 +48,38 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ code: strin
   const minutesIntoHour = (60 * 60_000 - msUntilEnd) / 60_000;
   const locked = minutesIntoHour >= 30;
 
-  const [trafficRows, hourly, hourlyTakeoff, scores, inbound, departing, latestRow] =
-    await Promise.all([
-      db
-        .select()
-        .from(liveAircraft)
-        .where(eq(liveAircraft.nearestAirport, airport)),
-      getHourlyLineForAirport(airport, hourStart),
-      getHourlyTakeoffLineForAirport(airport, hourStart),
-      getCurrentHourScores(now),
-      getInboundPlanesForAirport(airport),
-      getDepartingPlanesForAirport(airport),
-      db
-        .select({ ts: sql<string>`max(${liveAircraft.updatedAt})` })
-        .from(liveAircraft),
-    ]);
+  const [trafficRows, hourly, hourlyTakeoff, scores, inbound, departing, latestRow,
+         totalPaceByAirport, takeoffPaceByAirport] = await Promise.all([
+    db
+      .select()
+      .from(liveAircraft)
+      .where(eq(liveAircraft.nearestAirport, airport)),
+    getHourlyLineForAirport(airport, hourStart),
+    getHourlyTakeoffLineForAirport(airport, hourStart),
+    getCurrentHourScores(now),
+    getInboundPlanesForAirport(airport),
+    getDepartingPlanesForAirport(airport),
+    db
+      .select({ ts: sql<string>`max(${liveAircraft.updatedAt})` })
+      .from(liveAircraft),
+    getPaceByAirport(30, 'all'),
+    getPaceByAirport(30, 'takeoff'),
+  ]);
+
+  // Honest over/under odds for both markets, using pace + time remaining.
+  const minutesRemaining = Math.max(1, Math.round(msUntilEnd / 60_000));
+  const totalOpsOdds = raceOverUnderOdds({
+    currentScore: scores.total_ops[airport] ?? 0,
+    pace: totalPaceByAirport[airport] ?? 0,
+    minutesRemaining,
+    line: hourly.line,
+  });
+  const takeoffOdds = raceOverUnderOdds({
+    currentScore: scores.takeoff[airport] ?? 0,
+    pace: takeoffPaceByAirport[airport] ?? 0,
+    minutesRemaining,
+    line: hourlyTakeoff.line,
+  });
 
   const latest = latestRow[0]?.ts ? new Date(latestRow[0].ts) : null;
   const ageSec = latest ? Math.floor((now.getTime() - latest.getTime()) / 1000) : null;
@@ -92,11 +111,17 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ code: strin
         sampleHours: hourly.sampleHours,
         lineSource: hourly.source,
         currentCount: scores.total_ops[airport] ?? 0,
+        projection: Math.round(totalOpsOdds.expected),
+        overOdds: totalOpsOdds.over.american,
+        underOdds: totalOpsOdds.under.american,
         // Takeoffs-only O/U
         takeoffLine: hourlyTakeoff.line,
         takeoffSampleHours: hourlyTakeoff.sampleHours,
         takeoffLineSource: hourlyTakeoff.source,
         takeoffCount: scores.takeoff[airport] ?? 0,
+        takeoffProjection: Math.round(takeoffOdds.expected),
+        takeoffOverOdds: takeoffOdds.over.american,
+        takeoffUnderOdds: takeoffOdds.under.american,
         locked,
       },
       freshness: { latestLiveAircraftAt: latest?.toISOString() ?? null, ageSec },

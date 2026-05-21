@@ -11,68 +11,71 @@ type Hour = {
   sampleHours: number;
   lineSource: 'history' | 'fallback';
   currentCount: number;
+  projection: number;
+  overOdds: string;
+  underOdds: string;
   takeoffLine: number;
   takeoffSampleHours: number;
   takeoffLineSource: 'history' | 'fallback';
   takeoffCount: number;
+  takeoffProjection: number;
+  takeoffOverOdds: string;
+  takeoffUnderOdds: string;
   msUntilHourEnd: number;
   locked: boolean;
 };
 
-type Tab = 'total_ops' | 'takeoff';
+type Market = 'total_ops' | 'takeoff';
 
 type Props = {
   airport: AirportCode;
-  accent: string;
   hour: Hour;
+  stake: number;
+  setStake: (n: number) => void;
   balance: number;
   onBalanceChange: (newBal: number) => void;
 };
 
-const STAKE_PRESETS = [25, 100, 500];
+const STAKE_PRESETS = [25, 50, 100, 250, 500];
+const MIN_STAKE = 10;
+const MAX_STAKE = 1000;
 
-export function HourlyBetBox({ airport, accent, hour, balance, onBalanceChange }: Props) {
-  const [tab, setTab] = useState<Tab>('total_ops');
+export function HourlyBetBox({ airport, hour, stake, setStake, balance, onBalanceChange }: Props) {
+  const [market, setMarket] = useState<Market>('total_ops');
   const [side, setSide] = useState<'over' | 'under' | null>(null);
-  const [stake, setStake] = useState(100);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
 
-  // Reset bet form when switching tabs
+  // Reset side on market switch
   useEffect(() => {
     setSide(null);
     setError(null);
-    setSuccess(null);
-  }, [tab]);
+  }, [market]);
 
-  // Hour countdown — defer to client to avoid hydration mismatch
-  const [now, setNow] = useState<number | null>(null);
-  useEffect(() => {
-    setNow(Date.now());
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, []);
-  const hourEndMs = new Date(hour.hourEnd).getTime();
-  const msLeft = now == null ? null : Math.max(0, hourEndMs - now);
-  const minsLeft = msLeft == null ? null : Math.floor(msLeft / 60_000);
-  const secsLeft = msLeft == null ? null : Math.floor((msLeft % 60_000) / 1000);
+  const line = market === 'total_ops' ? hour.line : hour.takeoffLine;
+  const currentCount = market === 'total_ops' ? hour.currentCount : hour.takeoffCount;
+  const projection = market === 'total_ops' ? hour.projection : hour.takeoffProjection;
+  const overOdds = market === 'total_ops' ? hour.overOdds : hour.takeoffOverOdds;
+  const underOdds = market === 'total_ops' ? hour.underOdds : hour.takeoffUnderOdds;
+  const lineSource = market === 'total_ops' ? hour.lineSource : hour.takeoffLineSource;
+  const minsLeft = Math.max(0, Math.floor(hour.msUntilHourEnd / 60_000));
 
-  // Tab-specific values
-  const line = tab === 'total_ops' ? hour.line : hour.takeoffLine;
-  const currentCount = tab === 'total_ops' ? hour.currentCount : hour.takeoffCount;
-  const lineSource = tab === 'total_ops' ? hour.lineSource : hour.takeoffLineSource;
+  // Multiplier from selected side's American odds
+  const selectedOdds = side === 'over' ? overOdds : side === 'under' ? underOdds : null;
+  const dec = selectedOdds == null ? 0 : americanToDecimal(selectedOdds);
+  const profit = selectedOdds == null ? 0 : Math.round(stake * dec - stake);
 
   const place = () => {
     if (!side) return setError('Pick OVER or UNDER first');
-    if (stake <= 0 || stake > balance) return setError('Bad stake');
+    if (stake < MIN_STAKE) return setError(`Min stake $${MIN_STAKE}`);
+    if (stake > MAX_STAKE) return setError(`Max stake $${MAX_STAKE}`);
+    if (stake > balance) return setError('Insufficient balance');
     setError(null);
-    setSuccess(null);
     startTransition(async () => {
       const res = await placeBet({
         type: 'race_over_under',
         payload: {
-          raceType: tab as RaceType,
+          raceType: market as RaceType,
           airport,
           line,
           side,
@@ -82,7 +85,6 @@ export function HourlyBetBox({ airport, accent, hour, balance, onBalanceChange }
       });
       if ('ok' in res && res.ok) {
         onBalanceChange(res.newBalance);
-        setSuccess(`Bet placed: ${side.toUpperCase()} ${line} ${tab === 'takeoff' ? 'takeoffs' : 'ops'}`);
         setSide(null);
       } else if ('error' in res) {
         setError(res.error ?? 'Bet failed');
@@ -90,140 +92,130 @@ export function HourlyBetBox({ airport, accent, hour, balance, onBalanceChange }
     });
   };
 
-  const hourLabel = new Date(hour.hourStart).toISOString().slice(11, 16);
-  const hourEndLabel = new Date(hour.hourEnd).toISOString().slice(11, 16);
-  const pace =
-    minsLeft != null && minsLeft < 60
-      ? Math.round((currentCount / Math.max(1, 60 - minsLeft)) * 60)
-      : currentCount;
-  const projection = pace;
-
   return (
-    <div className="abet-card hourly">
-      <div className="abet-tabs">
-        <button
-          type="button"
-          className={`abet-tab ${tab === 'total_ops' ? 'on' : ''}`}
-          onClick={() => setTab('total_ops')}
-          style={tab === 'total_ops' ? { borderColor: accent, color: accent } : {}}
-        >
-          TOTAL OPS
-        </button>
-        <button
-          type="button"
-          className={`abet-tab ${tab === 'takeoff' ? 'on' : ''}`}
-          onClick={() => setTab('takeoff')}
-          style={tab === 'takeoff' ? { borderColor: accent, color: accent } : {}}
-        >
-          TAKEOFFS
-        </button>
-      </div>
-
-      <div className="abet-head">
-        <div className="abet-eyebrow mono">
-          HOURLY OVER/UNDER · {tab === 'takeoff' ? 'TAKEOFFS ONLY' : 'TAKEOFFS + LANDINGS'}
-        </div>
-        <div className="abet-meta mono">
-          {hourLabel}–{hourEndLabel} UTC
-          {minsLeft != null && (
-            <>
-              <span className="sep">·</span>
-              <span className={hour.locked || (minsLeft <= 5) ? 'urgent' : ''}>
-                {minsLeft}m {String(secsLeft).padStart(2, '0')}s left
-              </span>
-            </>
-          )}
-          {lineSource === 'fallback' && (
-            <>
-              <span className="sep">·</span>
-              <span className="note">line: fallback (thin history)</span>
-            </>
-          )}
+    <section className="ad-card">
+      <div className="ad-card-head">
+        <div className="ad-card-num mono">BET 1</div>
+        <h2 className="ad-card-title">This hour&rsquo;s over/under</h2>
+        <div className="ad-card-tabs">
+          <button className={market === 'total_ops' ? 'on' : ''} onClick={() => setMarket('total_ops')}>
+            Total ops
+          </button>
+          <button className={market === 'takeoff' ? 'on' : ''} onClick={() => setMarket('takeoff')}>
+            Takeoffs only
+          </button>
         </div>
       </div>
 
-      <div className="abet-line-row">
-        <div className="abet-line-block">
+      <div className="ou-scoreboard">
+        <div className="ou-cell">
           <div className="k mono">LINE</div>
-          <div className="v line-big">{line}</div>
+          <div className="v big">{line}</div>
         </div>
-        <div className="abet-line-block">
+        <div className="ou-cell">
           <div className="k mono">SO FAR</div>
           <div className="v">{currentCount}</div>
         </div>
-        <div className="abet-line-block">
-          <div className="k mono">PROJ</div>
-          <div className="v" title="Linear projection from current pace">
-            {projection}
-          </div>
+        <div className="ou-cell">
+          <div className="k mono">PROJECTED</div>
+          <div className={`v ${projection > line ? 'over' : 'under'}`}>{projection}</div>
+        </div>
+        <div className="ou-cell">
+          <div className="k mono">TIME LEFT</div>
+          <div className="v mono">{minsLeft}m</div>
         </div>
       </div>
 
       {hour.locked ? (
-        <div className="abet-locked mono">
-          BETS LOCKED · HALF HOUR REMAINING
-          <div className="abet-locked-sub">Settles at top of next hour</div>
+        <div className="plane-empty mono">
+          BETS LOCKED · LESS THAN 30 MIN REMAINING · SETTLES AT TOP OF NEXT HOUR
         </div>
       ) : (
         <>
-          <div className="abet-sides">
+          <div className="ou-picks">
             <button
               type="button"
-              className={`abet-side over ${side === 'over' ? 'on' : ''}`}
+              className={`ou-pick over ${side === 'over' ? 'on' : ''}`}
               onClick={() => setSide('over')}
-              style={side === 'over' ? { borderColor: accent, background: accent, color: 'white' } : {}}
             >
-              <span className="abet-side-tag mono">OVER</span>
-              <span className="abet-side-line">{line}</span>
+              <div className="ou-pick-lbl">Over</div>
+              <div className="ou-pick-v">{line}</div>
+              <div className="ou-pick-odds mono">{overOdds}</div>
+              <div className="ou-pick-hint mono">
+                {projection > line ? 'PROJ FAVORS' : 'LONGER ODDS'}
+              </div>
             </button>
             <button
               type="button"
-              className={`abet-side under ${side === 'under' ? 'on' : ''}`}
+              className={`ou-pick under ${side === 'under' ? 'on' : ''}`}
               onClick={() => setSide('under')}
-              style={side === 'under' ? { borderColor: accent, background: accent, color: 'white' } : {}}
             >
-              <span className="abet-side-tag mono">UNDER</span>
-              <span className="abet-side-line">{line}</span>
+              <div className="ou-pick-lbl">Under</div>
+              <div className="ou-pick-v">{line}</div>
+              <div className="ou-pick-odds mono">{underOdds}</div>
+              <div className="ou-pick-hint mono">
+                {projection < line ? 'PROJ FAVORS' : 'LONGER ODDS'}
+              </div>
             </button>
           </div>
 
-          <div className="abet-stake-row">
-            <div className="abet-stake-presets">
-              {STAKE_PRESETS.map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  className={`abet-stake-chip ${stake === s ? 'on' : ''}`}
-                  onClick={() => setStake(s)}
-                >
-                  ${s}
-                </button>
-              ))}
+          <div className="ou-stake">
+            <div className="ou-stake-l">
+              <div className="k mono">YOUR STAKE</div>
+              <div className="ou-chips">
+                {STAKE_PRESETS.map((v) => (
+                  <button key={v} className={stake === v ? 'on' : ''} onClick={() => setStake(v)}>
+                    {v}
+                  </button>
+                ))}
+              </div>
+              <div className="ou-stake-input">
+                <span className="g">$</span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={stake}
+                  onChange={(e) => {
+                    const n = parseInt(String(e.target.value).replace(/[^\d]/g, ''), 10);
+                    setStake(Number.isNaN(n) ? 0 : Math.min(MAX_STAKE, Math.max(0, n)));
+                  }}
+                />
+              </div>
             </div>
-            <input
-              type="number"
-              min={1}
-              max={balance}
-              value={stake}
-              onChange={(e) => setStake(Math.max(0, parseInt(e.target.value || '0', 10)))}
-              className="abet-stake-input mono"
-            />
+            <div className="ou-stake-r">
+              <div className="k mono">YOU WIN</div>
+              <div className="ou-win">${profit.toLocaleString()}</div>
+              <div className="ou-mult mono">
+                {selectedOdds ? `${dec.toFixed(2)}x · ${selectedOdds}` : 'PICK A SIDE'}
+              </div>
+            </div>
           </div>
 
           <button
             type="button"
-            className="abet-place"
-            disabled={pending || !side || stake <= 0 || stake > balance}
+            className="ou-place"
+            disabled={pending || !side || stake < MIN_STAKE || stake > balance}
             onClick={place}
-            style={{ background: accent }}
           >
-            {pending ? 'PLACING…' : `PLACE ${side ? side.toUpperCase() : ''} ${stake ? `$${stake}` : ''}`.trim()}
+            {pending ? 'Placing…' : side
+              ? `Place $${stake} · ${airport} ${market === 'total_ops' ? 'Total' : 'Takeoffs'} ${side.toUpperCase()} ${line} →`
+              : '↑ First, pick OVER or UNDER above'}
           </button>
+
+          {lineSource === 'fallback' && (
+            <div className="ad-card-explainer mono" style={{ fontSize: 10.5, color: 'var(--ink-3)', letterSpacing: '0.10em' }}>
+              LINE: FALLBACK (THIN HISTORY) · WILL TIGHTEN AS DATA ACCUMULATES
+            </div>
+          )}
+          {error && <div className="ad-card-explainer" style={{ color: 'var(--neg)' }}>{error}</div>}
         </>
       )}
-
-      {error && <div className="abet-msg err mono">{error}</div>}
-      {success && <div className="abet-msg ok mono">{success}</div>}
-    </div>
+    </section>
   );
+}
+
+function americanToDecimal(american: string): number {
+  const n = parseInt(american, 10);
+  if (Number.isNaN(n)) return 1;
+  return n > 0 ? 1 + n / 100 : 1 + 100 / Math.abs(n);
 }

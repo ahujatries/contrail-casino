@@ -6,6 +6,7 @@ import {
   getHourlyTakeoffLineForAirport,
   getInboundPlanesForAirport,
   getCurrentHourScores,
+  getPaceByAirport,
   type DepartingPlane,
   type InboundPlane,
 } from '@airport-pong/db';
@@ -13,6 +14,8 @@ import {
   AIRPORT_CODES,
   AIRPORT_NAMES,
   getCurrentHourStart,
+  msUntilNextHour,
+  raceOverUnderOdds,
   type AirportCode,
 } from '@airport-pong/shared';
 import { getCurrentUser } from '../../../lib/session';
@@ -40,14 +43,30 @@ export default async function AirportPage({ params }: { params: Params }) {
   const hourStart = getCurrentHourStart(now);
   const user = await getCurrentUser();
 
-  const [hourly, hourlyTakeoff, scores, inbound, departing, userBets] = await Promise.all([
-    getHourlyLineForAirport(airport, hourStart),
-    getHourlyTakeoffLineForAirport(airport, hourStart),
-    getCurrentHourScores(now),
-    getInboundPlanesForAirport(airport),
-    getDepartingPlanesForAirport(airport),
-    user ? getActiveBetsForUser(user.id) : Promise.resolve([]),
-  ]);
+  const [hourly, hourlyTakeoff, scores, inbound, departing, userBets, totalPace, takeoffPace] =
+    await Promise.all([
+      getHourlyLineForAirport(airport, hourStart),
+      getHourlyTakeoffLineForAirport(airport, hourStart),
+      getCurrentHourScores(now),
+      getInboundPlanesForAirport(airport),
+      getDepartingPlanesForAirport(airport),
+      user ? getActiveBetsForUser(user.id) : Promise.resolve([]),
+      getPaceByAirport(30, 'all'),
+      getPaceByAirport(30, 'takeoff'),
+    ]);
+  const minsRemaining = Math.max(1, Math.round(msUntilNextHour(now) / 60_000));
+  const totalOpsOdds = raceOverUnderOdds({
+    currentScore: scores.total_ops[airport] ?? 0,
+    pace: totalPace[airport] ?? 0,
+    minutesRemaining: minsRemaining,
+    line: hourly.line,
+  });
+  const takeoffOdds = raceOverUnderOdds({
+    currentScore: scores.takeoff[airport] ?? 0,
+    pace: takeoffPace[airport] ?? 0,
+    minutesRemaining: minsRemaining,
+    line: hourlyTakeoff.line,
+  });
 
   if (!user) {
     return (
@@ -79,10 +98,16 @@ export default async function AirportPage({ params }: { params: Params }) {
         sampleHours: hourly.sampleHours,
         lineSource: hourly.source,
         currentCount: scores.total_ops[airport] ?? 0,
+        projection: Math.round(totalOpsOdds.expected),
+        overOdds: totalOpsOdds.over.american,
+        underOdds: totalOpsOdds.under.american,
         takeoffLine: hourlyTakeoff.line,
         takeoffSampleHours: hourlyTakeoff.sampleHours,
         takeoffLineSource: hourlyTakeoff.source,
         takeoffCount: scores.takeoff[airport] ?? 0,
+        takeoffProjection: Math.round(takeoffOdds.expected),
+        takeoffOverOdds: takeoffOdds.over.american,
+        takeoffUnderOdds: takeoffOdds.under.american,
       }}
       initialInbound={inbound as InboundPlane[]}
       initialDeparting={departing as DepartingPlane[]}
