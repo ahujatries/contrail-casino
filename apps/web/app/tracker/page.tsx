@@ -1,12 +1,16 @@
+import { eq } from 'drizzle-orm';
 import {
   getCurrentHourScores,
-  getFeaturedFlightForAirport,
+  getDb,
+  getNextLandingForAirport,
+  getNextTakeoffForAirport,
   getPaceByAirport,
+  liveAircraft,
 } from '@airport-pong/db';
 import { AIRPORT_CODES, AIRPORT_NAMES, type AirportCode } from '@airport-pong/shared';
 import { getCurrentUser } from '../../lib/session';
 import { TopBar } from '../_components/TopBar';
-import { MapTracker } from '../_components/MapTracker';
+import { MapTracker, type Aircraft } from '../_components/MapTracker';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,14 +26,30 @@ export const metadata = {
 };
 
 export default async function TrackerPage() {
-  const [user, scores, takeoffPace, landingFeed, ...flights] = await Promise.all([
+  const focusAirport: AirportCode = AIRPORT_CODES[0];
+  const db = getDb();
+  const [user, scores, takeoffPace, takeoff, landing, trafficRows] = await Promise.all([
     getCurrentUser(),
     getCurrentHourScores(),
     getPaceByAirport(30, 'takeoff'),
-    Promise.resolve(null), // placeholder for shape
-    ...AIRPORT_CODES.map((c) => getFeaturedFlightForAirport(c)),
+    getNextTakeoffForAirport(focusAirport),
+    getNextLandingForAirport(focusAirport),
+    db.select().from(liveAircraft).where(eq(liveAircraft.nearestAirport, focusAirport)),
   ]);
-  void landingFeed;
+  const featured = takeoff ?? landing ?? null;
+  const traffic: Aircraft[] = trafficRows.map((r) => ({
+    icao24: r.icao24,
+    callsign: r.callsign,
+    typecode: r.typecode,
+    isHeavy: r.isHeavy,
+    latitude: r.latitude,
+    longitude: r.longitude,
+    altitudeFt: r.altitudeFt,
+    velocityKt: r.velocityKt,
+    headingDeg: r.headingDeg,
+    onGround: r.onGround,
+    updatedAt: r.updatedAt.toISOString(),
+  }));
 
   return (
     <div className="app" data-route="tracker">
@@ -93,9 +113,12 @@ export default async function TrackerPage() {
           <div className="tracker-big" style={{ minHeight: 520, padding: 0, position: 'relative' }}>
             <div style={{ position: 'absolute', inset: 0 }}>
               <MapTracker
-                airport={AIRPORT_CODES[0]}
-                accent={ACCENT[AIRPORT_CODES[0]]}
-                featured={flights[0] ?? null}
+                airport={focusAirport}
+                accent={ACCENT[focusAirport]}
+                aircraft={traffic}
+                followIcao24={featured?.icao24 ?? null}
+                featured={featured ? { callsign: featured.callsign, typecode: featured.typecode, isHeavy: featured.isHeavy } : null}
+                ageSec={null}
               />
             </div>
           </div>

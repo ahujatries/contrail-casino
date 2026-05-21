@@ -1,18 +1,14 @@
 'use client';
 
-import { MapTracker } from './MapTracker';
+import { MapTracker, type Aircraft } from './MapTracker';
 import { AIRPORT_NAMES, type AirportCode } from '@airport-pong/shared';
 
-export type TrackerFlight = {
-  a1: AirportCode;
-  a2: AirportCode;
-  aPace: number;
-  bPace: number;
-  aTakeoffs: number;
-  bTakeoffs: number;
-  aLandings: number;
-  bLandings: number;
-};
+type FeaturedPlane = {
+  callsign: string | null;
+  typecode: string | null;
+  isHeavy: boolean;
+  icao24: string;
+} | null;
 
 const ACCENT: Record<AirportCode, string> = {
   JFK: 'oklch(0.42 0.20 258)',
@@ -21,27 +17,60 @@ const ACCENT: Record<AirportCode, string> = {
   LAX: 'oklch(0.45 0.16 305)',
 };
 
-export function TrackerPane({ flight }: { flight: TrackerFlight }) {
+type Props = {
+  a1: AirportCode;
+  a2: AirportCode;
+  mode: 'takeoff' | 'landing' | 'hour';
+  traffic: Partial<Record<AirportCode, Aircraft[]>>;
+  featuredPlanes: Partial<Record<AirportCode, FeaturedPlane>>;
+  followIcao24: Partial<Record<AirportCode, string | null>>;
+  ageSec: number | null;
+  paces: Partial<Record<AirportCode, number>>;
+  scores: Partial<Record<AirportCode, { takeoff: number; landing: number }>>;
+};
+
+export function TrackerPane({
+  a1,
+  a2,
+  mode,
+  traffic,
+  featuredPlanes,
+  followIcao24,
+  ageSec,
+  paces,
+  scores,
+}: Props) {
   return (
     <aside className="stage-tracker">
       <div className="trk-head">
         <div className="trk-title mono">LIVE TRACKER</div>
         <div className="trk-sub mono">
-          {flight.a1} <span>·</span> {flight.a2} <span>·</span> APPROACH WINDOW
+          {a1} <span>·</span> {a2} <span>·</span>{' '}
+          {mode === 'hour' ? 'HOUR RACE' : mode === 'takeoff' ? 'TAKEOFF' : 'LANDING'}
         </div>
       </div>
       <div className="trk-dual">
         <TrackerCell
-          airport={flight.a1}
-          pace={flight.aPace}
-          takeoffs={flight.aTakeoffs}
-          landings={flight.aLandings}
+          airport={a1}
+          aircraft={traffic[a1] ?? []}
+          featured={featuredPlanes[a1] ?? null}
+          followIcao24={followIcao24[a1] ?? null}
+          ageSec={ageSec}
+          pace={paces[a1] ?? 0}
+          takeoffs={scores[a1]?.takeoff ?? 0}
+          landings={scores[a1]?.landing ?? 0}
+          mode={mode}
         />
         <TrackerCell
-          airport={flight.a2}
-          pace={flight.bPace}
-          takeoffs={flight.bTakeoffs}
-          landings={flight.bLandings}
+          airport={a2}
+          aircraft={traffic[a2] ?? []}
+          featured={featuredPlanes[a2] ?? null}
+          followIcao24={followIcao24[a2] ?? null}
+          ageSec={ageSec}
+          pace={paces[a2] ?? 0}
+          takeoffs={scores[a2]?.takeoff ?? 0}
+          landings={scores[a2]?.landing ?? 0}
+          mode={mode}
         />
       </div>
     </aside>
@@ -50,15 +79,32 @@ export function TrackerPane({ flight }: { flight: TrackerFlight }) {
 
 function TrackerCell({
   airport,
+  aircraft,
+  featured,
+  followIcao24,
+  ageSec,
   pace,
   takeoffs,
   landings,
+  mode,
 }: {
   airport: AirportCode;
+  aircraft: Aircraft[];
+  featured: FeaturedPlane;
+  followIcao24: string | null;
+  ageSec: number | null;
   pace: number;
   takeoffs: number;
   landings: number;
+  mode: 'takeoff' | 'landing' | 'hour';
 }) {
+  const followLabel = (() => {
+    if (mode === 'hour') return 'CENTERED ON FIELD';
+    if (followIcao24 && featured?.callsign) return `FOLLOW · ${featured.callsign}`;
+    if (followIcao24) return `FOLLOW · ${followIcao24.toUpperCase()}`;
+    return 'NO PLANE TO FOLLOW';
+  })();
+
   return (
     <div className={`trk-cell airport-${airport.toLowerCase()}`}>
       <div className="trk-cell-head">
@@ -66,6 +112,7 @@ function TrackerCell({
           <span className="trk-cell-led" />
           <span className="trk-cell-code">{airport}</span>
           <span className="trk-cell-name">{AIRPORT_NAMES[airport].replace(/\s*\(.*\)\s*/, '')}</span>
+          <span className="trk-cell-follow mono">{followLabel}</span>
         </div>
         <div className="trk-cell-right mono">
           <span>
@@ -80,7 +127,14 @@ function TrackerCell({
         </div>
       </div>
       <div className="trk-cell-map">
-        <MapTracker airport={airport} accent={ACCENT[airport]} featured={null} />
+        <MapTracker
+          airport={airport}
+          accent={ACCENT[airport]}
+          aircraft={aircraft}
+          followIcao24={followIcao24}
+          featured={featured}
+          ageSec={ageSec}
+        />
       </div>
     </div>
   );

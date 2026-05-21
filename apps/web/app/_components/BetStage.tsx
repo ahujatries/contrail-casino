@@ -41,6 +41,8 @@ type Props = {
   balance: number;
   bets: ActiveBet[];
   onPlaced?: (newBalance: number) => void;
+  mode?: Mode;
+  onModeChange?: (m: Mode) => void;
 };
 
 export function BetStage({
@@ -53,8 +55,15 @@ export function BetStage({
   balance,
   bets,
   onPlaced,
+  mode: controlledMode,
+  onModeChange,
 }: Props) {
-  const [mode, setMode] = useState<Mode>('takeoff');
+  const [internalMode, setInternalMode] = useState<Mode>('takeoff');
+  const mode = controlledMode ?? internalMode;
+  const setMode = (m: Mode) => {
+    setInternalMode(m);
+    onModeChange?.(m);
+  };
   const [side, setSide] = useState<Side>('a');
   const [stake, setStake] = useState(100);
   const [pending, setPending] = useState(false);

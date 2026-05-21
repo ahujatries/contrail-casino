@@ -10,13 +10,14 @@ import {
 } from '@airport-pong/shared';
 import { TopBar } from './TopBar';
 import { BetStage } from './BetStage';
-import { TrackerPane, type TrackerFlight } from './TrackerPane';
+import { TrackerPane } from './TrackerPane';
 import { TickerTape, type TickerEvent } from './Ticker';
 import { ToastStack, type Toast } from './BetResolutionToast';
 import { WelcomeModal } from './WelcomeModal';
 import { RefillModal } from './RefillModal';
 import type { ActiveBet } from './ActiveBets';
 import type { DuelLandingFlight, DuelTakeoffFlight } from '@airport-pong/db';
+import type { Aircraft } from './MapTracker';
 
 type Pace = Record<AirportCode, number>;
 
@@ -58,6 +59,23 @@ type IncomingBetResolved = {
 };
 type SSEMessage = IncomingEvent | IncomingBetPlaced | IncomingBetResolved;
 
+type Mode = 'takeoff' | 'landing' | 'hour';
+
+type DashboardResp = {
+  fetchedAt: string;
+  freshness: { latestLiveAircraftAt: string | null; ageSec: number | null };
+  airports: Record<
+    string,
+    {
+      traffic: Aircraft[];
+      takeoff: DuelTakeoffFlight | null;
+      landing: DuelLandingFlight | null;
+    }
+  >;
+};
+
+const DASHBOARD_POLL_MS = 30_000;
+
 export function LiveDashboard({
   user,
   featured,
@@ -74,6 +92,47 @@ export function LiveDashboard({
   const [balance, setBalance] = useState(user.balance);
   const [bets, setBets] = useState<ActiveBet[]>(initialBets);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [mode, setMode] = useState<Mode>('takeoff');
+
+  // Live data — one combined call for both featured airports
+  const [liveData, setLiveData] = useState<DashboardResp | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const fetchData = async () => {
+      try {
+        const r = await fetch(`/api/dashboard?airports=${featured.join(',')}`, {
+          cache: 'no-store',
+        });
+        if (!r.ok) return;
+        const data = (await r.json()) as DashboardResp;
+        if (!cancelled) setLiveData(data);
+      } catch {
+        // ignore transient errors
+      }
+    };
+    void fetchData();
+    const id = setInterval(fetchData, DASHBOARD_POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [featured]);
+
+  const currentTakeoff: Record<AirportCode, DuelTakeoffFlight | null> = {
+    ...takeoffFlights,
+  };
+  const currentLanding: Record<AirportCode, DuelLandingFlight | null> = {
+    ...landingFlights,
+  };
+  if (liveData) {
+    for (const code of featured) {
+      const slice = liveData.airports[code];
+      if (slice) {
+        currentTakeoff[code] = slice.takeoff;
+        currentLanding[code] = slice.landing;
+      }
+    }
+  }
 
   const seenEventIds = useRef(new Set<number>(initialEvents.map((e) => e.id)));
   const hourStartRef = useRef(getCurrentHourStart().toISOString());
@@ -183,15 +242,10 @@ export function LiveDashboard({
   const onBetPlaced = (newBalance: number) => setBalance(newBalance);
   const openBets = bets.filter((b) => b.status === 'open');
 
-  const trackerFlight: TrackerFlight = {
-    a1: featured[0],
-    a2: featured[1],
-    aPace: pace.total[featured[0]],
-    bPace: pace.total[featured[1]],
-    aTakeoffs: scores.takeoff[featured[0]],
-    bTakeoffs: scores.takeoff[featured[1]],
-    aLandings: Math.max(0, scores.total_ops[featured[0]] - scores.takeoff[featured[0]]),
-    bLandings: Math.max(0, scores.total_ops[featured[1]] - scores.takeoff[featured[1]]),
+  const focusIcao24Per = (a: AirportCode): string | null => {
+    if (mode === 'takeoff') return currentTakeoff[a]?.icao24 ?? null;
+    if (mode === 'landing') return currentLanding[a]?.icao24 ?? null;
+    return null;
   };
 
   return (
@@ -204,13 +258,56 @@ export function LiveDashboard({
             a2={featured[1]}
             scores={scores}
             pace={pace}
-            takeoffFlights={takeoffFlights}
-            landingFlights={landingFlights}
+            takeoffFlights={currentTakeoff}
+            landingFlights={currentLanding}
             balance={balance}
             bets={bets}
             onPlaced={onBetPlaced}
+            mode={mode}
+            onModeChange={setMode}
           />
-          <TrackerPane flight={trackerFlight} />
+          <TrackerPane
+            a1={featured[0]}
+            a2={featured[1]}
+            mode={mode}
+            traffic={{
+              [featured[0]]: liveData?.airports[featured[0]]?.traffic ?? [],
+              [featured[1]]: liveData?.airports[featured[1]]?.traffic ?? [],
+            }}
+            featuredPlanes={{
+              [featured[0]]:
+                mode === 'takeoff'
+                  ? currentTakeoff[featured[0]]
+                  : mode === 'landing'
+                    ? currentLanding[featured[0]]
+                    : null,
+              [featured[1]]:
+                mode === 'takeoff'
+                  ? currentTakeoff[featured[1]]
+                  : mode === 'landing'
+                    ? currentLanding[featured[1]]
+                    : null,
+            }}
+            followIcao24={{
+              [featured[0]]: focusIcao24Per(featured[0]),
+              [featured[1]]: focusIcao24Per(featured[1]),
+            }}
+            ageSec={liveData?.freshness.ageSec ?? null}
+            paces={{
+              [featured[0]]: pace.total[featured[0]],
+              [featured[1]]: pace.total[featured[1]],
+            }}
+            scores={{
+              [featured[0]]: {
+                takeoff: scores.takeoff[featured[0]],
+                landing: Math.max(0, scores.total_ops[featured[0]] - scores.takeoff[featured[0]]),
+              },
+              [featured[1]]: {
+                takeoff: scores.takeoff[featured[1]],
+                landing: Math.max(0, scores.total_ops[featured[1]] - scores.takeoff[featured[1]]),
+              },
+            }}
+          />
         </main>
         <TickerTape events={events} />
       </div>
