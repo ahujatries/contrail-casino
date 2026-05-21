@@ -9,12 +9,14 @@ import { TopBar } from '../_components/TopBar';
 
 export const dynamic = 'force-dynamic';
 
+const fmtMoney = (n: number) => Math.round(n).toLocaleString('en-US');
+
 export default async function BetsPage() {
   const user = await getCurrentUser();
   if (!user) {
     return (
-      <main className="page-shell">
-        <div className="container">Setting up your callsign… refresh.</div>
+      <main className="screen">
+        <div className="screen-inner">Setting up your callsign… refresh.</div>
       </main>
     );
   }
@@ -23,202 +25,129 @@ export default async function BetsPage() {
   const settled = rows.filter((b) => b.status !== 'open');
   const wins = settled.filter((b) => b.status === 'won');
   const losses = settled.filter((b) => b.status === 'lost');
-  const grossProfit = wins.reduce((s, b) => s + (b.potentialPayout - b.stake), 0);
-  const grossLoss = losses.reduce((s, b) => s + b.stake, 0);
-  const net = grossProfit - grossLoss;
+  const totalRisk = open.reduce((s, b) => s + b.stake, 0);
+  const totalPotential = open.reduce((s, b) => s + b.potentialPayout, 0);
 
   return (
-    <div
-      style={{
-        height: '100vh',
-        display: 'grid',
-        gridTemplateRows: '56px 1fr',
-        background: 'var(--bg-0)',
-        position: 'relative',
-        zIndex: 1,
-      }}
-    >
-      <TopBar callsign={user.callsign} balance={user.balance} active="bets" />
-      <main className="page-shell" style={{ overflow: 'auto', padding: '32px 24px' }}>
-        <div className="container">
-          <h1 style={{ fontSize: 28, color: 'var(--ink-0)', margin: '0 0 24px' }}>
-            Your bets
-          </h1>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(4, 1fr)',
-              gap: 12,
-              marginBottom: 24,
-            }}
-          >
-            <Stat label="OPEN" value={open.length} />
-            <Stat label="W / L" value={`${wins.length} / ${losses.length}`} />
-            <Stat
-              label="NET P/L"
-              value={`${net >= 0 ? '+' : ''}✈$${net.toLocaleString('en-US')}`}
-              tone={net >= 0 ? 'pos' : 'neg'}
-            />
-            <Stat label="BALANCE" value={`✈$${user.balance.toLocaleString('en-US')}`} />
+    <div className="app" data-route="your-bets">
+      <TopBar callsign={user.callsign} balance={user.balance} active="your-bets" />
+      <main className="screen screen-bets-history">
+        <div className="screen-inner">
+          <div className="screen-head">
+            <div>
+              <div className="micro mono screen-kicker">OPEN POSITIONS · SETTLED TODAY</div>
+              <h1 className="screen-title">Your Bets</h1>
+              <p className="screen-sub">
+                Track bets in flight and review settled bets. Times shown in UTC.
+              </p>
+            </div>
           </div>
-          <Section title={`OPEN · ${open.length}`} bets={open} />
-          <Section title={`SETTLED · ${settled.length}`} bets={settled} />
+
+          <div className="yb-summary">
+            <Cell k="OPEN" v={String(open.length)} />
+            <Cell k="AT RISK" v={`✈ $${fmtMoney(totalRisk)}`} />
+            <Cell k="POTENTIAL WIN" v={`✈ $${fmtMoney(totalPotential)}`} win />
+            <Cell k="BALANCE" v={`✈ $${fmtMoney(user.balance)}`} />
+          </div>
+
+          <h2 className="yb-section mono">OPEN · {open.length}</h2>
+          <table className="yb-table">
+            <thead>
+              <tr>
+                <th>BET</th>
+                <th>DESCRIPTION</th>
+                <th className="num">RISK</th>
+                <th className="num">TO WIN</th>
+                <th>STATUS</th>
+              </tr>
+            </thead>
+            <tbody>
+              {open.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="empty mono">
+                    No open bets. <a href="/bet">Browse bet types →</a>
+                  </td>
+                </tr>
+              )}
+              {open.map((b) => (
+                <tr key={b.id}>
+                  <td>
+                    <span className="yb-tag mono">{b.betType.replace(/_/g, ' ').toUpperCase()}</span>
+                  </td>
+                  <td>{describeSafe(b)}</td>
+                  <td className="num mono">✈ ${fmtMoney(b.stake)}</td>
+                  <td className="num mono win">✈ ${fmtMoney(b.potentialPayout)}</td>
+                  <td>
+                    <span className="yb-status open mono">● OPEN</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <h2 className="yb-section mono">SETTLED · {settled.length} (W {wins.length} / L {losses.length})</h2>
+          <table className="yb-table">
+            <thead>
+              <tr>
+                <th>BET</th>
+                <th>DESCRIPTION</th>
+                <th className="num">RISK</th>
+                <th className="num">RESULT</th>
+                <th>TIME</th>
+              </tr>
+            </thead>
+            <tbody>
+              {settled.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="empty mono">
+                    No settled bets yet.
+                  </td>
+                </tr>
+              )}
+              {settled.map((b) => {
+                const net =
+                  b.status === 'won'
+                    ? b.potentialPayout - b.stake
+                    : b.status === 'lost'
+                      ? -b.stake
+                      : 0;
+                const t = (b.resolvedAt ?? b.placedAt).toISOString().slice(11, 16);
+                return (
+                  <tr key={b.id}>
+                    <td>
+                      <span className="yb-tag mono">{b.betType.replace(/_/g, ' ').toUpperCase()}</span>
+                    </td>
+                    <td>{describeSafe(b)}</td>
+                    <td className="num mono">✈ ${fmtMoney(b.stake)}</td>
+                    <td className={`num mono ${net >= 0 ? 'win' : 'lose'}`}>
+                      {net > 0 ? '+' : ''}✈ ${fmtMoney(Math.abs(net))}
+                    </td>
+                    <td className="mono">UTC {t}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       </main>
+      <footer style={{ height: 44, borderTop: '0.5px solid var(--line)', background: 'var(--bg-1)' }} />
     </div>
   );
 }
 
-function Stat({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: string | number;
-  tone?: 'pos' | 'neg';
-}) {
-  const color = tone === 'pos' ? 'var(--pos)' : tone === 'neg' ? 'var(--neg)' : 'var(--ink-0)';
+function Cell({ k, v, win = false }: { k: string; v: string; win?: boolean }) {
   return (
-    <div
-      style={{
-        padding: '12px 14px',
-        background: 'var(--bg-1)',
-        border: '0.5px solid var(--line-soft)',
-        borderRadius: 'var(--radius-md)',
-      }}
-    >
-      <div
-        style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: 10,
-          letterSpacing: '0.2em',
-          color: 'var(--ink-3)',
-          textTransform: 'uppercase',
-        }}
-      >
-        {label}
-      </div>
-      <div
-        style={{
-          fontFamily: 'var(--font-mono)',
-          fontVariantNumeric: 'tabular-nums',
-          fontSize: 20,
-          marginTop: 6,
-          color,
-        }}
-      >
-        {value}
-      </div>
+    <div className="yb-summary-cell">
+      <div className="k mono">{k}</div>
+      <div className={`v ${win ? 'win' : ''}`}>{v}</div>
     </div>
   );
 }
 
-function Section({ title, bets }: { title: string; bets: ActiveBetRow[] }) {
-  if (bets.length === 0) return null;
-  return (
-    <section style={{ marginBottom: 24 }}>
-      <div
-        style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: 11,
-          letterSpacing: '0.22em',
-          color: 'var(--ink-3)',
-          textTransform: 'uppercase',
-          marginBottom: 10,
-        }}
-      >
-        {title}
-      </div>
-      <ul
-        style={{
-          margin: 0,
-          padding: 0,
-          listStyle: 'none',
-          border: '0.5px solid var(--line)',
-          borderRadius: 'var(--radius-md)',
-          background: 'var(--bg-1)',
-          overflow: 'hidden',
-        }}
-      >
-        {bets.map((b) => {
-          const label = (() => {
-            try {
-              return describeBet(
-                b.betType as BetTypeKey,
-                b.betPayload as BetPayloadByType[BetTypeKey]
-              );
-            } catch {
-              return b.betType;
-            }
-          })();
-          const placed = b.placedAt.toISOString().replace('T', ' ').slice(0, 16);
-          const net =
-            b.status === 'won'
-              ? b.potentialPayout - b.stake
-              : b.status === 'lost'
-                ? -b.stake
-                : 0;
-          const statusColor =
-            b.status === 'open'
-              ? 'var(--accent)'
-              : b.status === 'won'
-                ? 'var(--pos)'
-                : b.status === 'lost'
-                  ? 'var(--neg)'
-                  : 'var(--ink-3)';
-          return (
-            <li
-              key={b.id}
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr auto auto',
-                gap: 16,
-                padding: '10px 14px',
-                borderBottom: '0.5px solid var(--line-soft)',
-                alignItems: 'baseline',
-              }}
-            >
-              <div>
-                <div style={{ color: 'var(--ink-0)', fontSize: 13 }}>{label}</div>
-                <div
-                  style={{
-                    fontFamily: 'var(--font-mono)',
-                    fontVariantNumeric: 'tabular-nums',
-                    fontSize: 10.5,
-                    color: 'var(--ink-3)',
-                    marginTop: 3,
-                  }}
-                >
-                  {placed}Z · risk ✈${b.stake}
-                </div>
-              </div>
-              <span
-                style={{
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 10.5,
-                  letterSpacing: '0.2em',
-                  color: statusColor,
-                }}
-              >
-                {b.status.toUpperCase()}
-              </span>
-              <span
-                style={{
-                  fontFamily: 'var(--font-mono)',
-                  fontVariantNumeric: 'tabular-nums',
-                  fontSize: 13,
-                  color:
-                    net > 0 ? 'var(--pos)' : net < 0 ? 'var(--neg)' : 'var(--ink-3)',
-                }}
-              >
-                {net > 0 ? '+' : ''}
-                {net !== 0 ? `✈$${Math.abs(net)}` : '—'}
-              </span>
-            </li>
-          );
-        })}
-      </ul>
-    </section>
-  );
+function describeSafe(b: ActiveBetRow): string {
+  try {
+    return describeBet(b.betType as BetTypeKey, b.betPayload as BetPayloadByType[BetTypeKey]);
+  } catch {
+    return b.betType;
+  }
 }

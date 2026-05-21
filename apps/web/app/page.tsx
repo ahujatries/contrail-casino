@@ -4,35 +4,24 @@ import {
   getFeaturedFlightForAirport,
   getPaceByAirport,
   getRecentEvents,
-  getTodayTotals,
 } from '@airport-pong/db';
 import { AIRPORT_CODES, getFeatureMatchup, type AirportCode } from '@airport-pong/shared';
 import { getCurrentUser } from '../lib/session';
 import { LiveDashboard } from './_components/LiveDashboard';
 import type { ActiveBet } from './_components/ActiveBets';
-import type { LiveFlight } from './_components/FlightTracker';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
+type LiveFlight = { callsign: string | null; typecode: string | null };
+
 export default async function Page() {
   const now = new Date();
   const featured = getFeatureMatchup(now);
-
   const user = await getCurrentUser();
-  const [
-    scores,
-    todayTotals,
-    recent,
-    takeoffPace,
-    heavyPace,
-    totalPace,
-    userBets,
-    flightA,
-    flightB,
-  ] = await Promise.all([
+
+  const [scores, recent, takeoffPace, heavyPace, totalPace, userBets, fA, fB] = await Promise.all([
     getCurrentHourScores(now),
-    getTodayTotals(now),
     getRecentEvents(25),
     getPaceByAirport(30, 'takeoff'),
     getPaceByAirport(60, 'heavy'),
@@ -69,15 +58,20 @@ export default async function Page() {
     ATL: null,
     LAX: null,
   };
-  if (flightA) liveFlights[featured[0]] = flightA;
-  if (flightB) liveFlights[featured[1]] = flightB;
+  if (fA) liveFlights[featured[0]] = { callsign: fA.callsign, typecode: fA.typecode };
+  if (fB) liveFlights[featured[1]] = { callsign: fB.callsign, typecode: fB.typecode };
 
   if (!user) {
     return (
-      <main className="page-shell">
-        <div className="container">Setting up your callsign… refresh the page.</div>
+      <main className="screen">
+        <div className="screen-inner">Setting up your callsign… refresh the page.</div>
       </main>
     );
+  }
+
+  // Make sure all 4 airports have entries (LiveDashboard passes through to the BetStage)
+  for (const c of AIRPORT_CODES) {
+    if (!(c in liveFlights)) liveFlights[c] = null;
   }
 
   return (
@@ -85,7 +79,6 @@ export default async function Page() {
       user={{ id: user.id, callsign: user.callsign, balance: user.balance }}
       featured={featured}
       initialScores={scores}
-      initialTodayTotals={todayTotals}
       initialEvents={initialEvents}
       initialPace={{ takeoff: takeoffPace, heavy: heavyPace, total: totalPace }}
       initialBets={initialBets}

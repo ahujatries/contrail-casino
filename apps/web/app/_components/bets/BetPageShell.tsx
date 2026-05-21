@@ -13,24 +13,25 @@ type Props = {
 
 export function BetPageShell({ eyebrow, title, blurb, bets, children }: Props) {
   return (
-    <div className="bet-page">
-      <div className="bet-page-head">
-        <a href="/" className="bet-back">
-          ← Back to live
-        </a>
-        <div className="bet-page-eyebrow">{eyebrow}</div>
-        <h1 className="bet-page-title">{title}</h1>
-        <p className="bet-page-blurb">{blurb}</p>
+    <main className="screen screen-detail">
+      <div className="screen-inner">
+        <a href="/bet" className="back-link mono">← All bet types</a>
+        <div className="screen-head">
+          <div>
+            <div className="micro mono screen-kicker">{eyebrow}</div>
+            <h1 className="screen-title">{title}</h1>
+            <p className="screen-sub">{blurb}</p>
+          </div>
+        </div>
+        <div className="detail-grid">
+          <div className="detail-config">{children}</div>
+          <aside className="detail-sidebar">
+            <div className="ds-card">
+              <ActiveBets bets={bets} />
+            </div>
+          </aside>
+        </div>
       </div>
-      <div className="bet-page-body">
-        <div className="bet-page-form">{children}</div>
-        <aside className="bet-page-side">
-          <ActiveBets bets={bets} />
-          <a href="/bet" className="bet-other-link">
-            ← All bet types
-          </a>
-        </aside>
-      </div>
-    </div>
+    </main>
   );
 }

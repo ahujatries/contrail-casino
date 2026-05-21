@@ -1,13 +1,16 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { AnimatedBalance } from './AnimatedBalance';
+
+type Route = 'home' | 'bets' | 'bet' | 'tracker' | 'leaderboard' | 'your-bets' | 'about';
 
 type Props = {
   callsign: string;
   balance: number;
-  active?: 'home' | 'tracker' | 'leaderboard' | 'bets' | 'about';
+  active?: Route;
 };
+
+const fmtMoney = (n: number) => Math.round(n).toLocaleString('en-US');
 
 export function TopBar({ callsign, balance, active = 'home' }: Props) {
   const [now, setNow] = useState<Date | null>(null);
@@ -16,10 +19,11 @@ export function TopBar({ callsign, balance, active = 'home' }: Props) {
     const id = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(id);
   }, []);
+  const utc = now ? now.toISOString().slice(11, 19) : '--:--:--';
 
   return (
     <header className="topbar">
-      <a href="/" className="brand">
+      <a className="brand" href="/">
         <span className="dot" />
         <span className="glyph">
           <svg
@@ -39,38 +43,25 @@ export function TopBar({ callsign, balance, active = 'home' }: Props) {
             />
           </svg>
         </span>
-        <span className="wordmark">
-          <span className="primary">Contrail</span>
-          <span className="sep">·</span>
-          <span className="secondary">Casino</span>
-        </span>
+        AIRPORT PONG
       </a>
       <nav className="nav">
-        <a className={active === 'home' ? 'active' : ''} href="/">Home</a>
+        <a className={active === 'home' ? 'active' : ''} href="/">Live</a>
+        <a className={active === 'bets' || active === 'bet' ? 'active' : ''} href="/bet">Bet Types</a>
         <a className={active === 'tracker' ? 'active' : ''} href="/tracker">Tracker</a>
-        <a className={active === 'leaderboard' ? 'active' : ''} href="/leaderboard">Leaderboard</a>
-        <a className={active === 'bets' ? 'active' : ''} href="/bets">Your Bets</a>
+        <a className={active === 'leaderboard' ? 'active' : ''} href="/leaderboard">Board</a>
+        <a className={active === 'your-bets' ? 'active' : ''} href="/bets">Your Bets</a>
         <a className={active === 'about' ? 'active' : ''} href="/about">About</a>
       </nav>
       <div className="topbar-right">
-        <span
-          className="mono"
-          style={{
-            fontSize: 11,
-            color: 'var(--ink-3)',
-            letterSpacing: '0.1em',
-            textTransform: 'uppercase',
-          }}
-        >
-          UTC {now ? now.toISOString().slice(11, 19) : '--:--:--'}
-        </span>
+        <span className="mono utc-clock">UTC {utc}</span>
         <div className="callsign">
           <span className="you">YOU</span>
           {callsign}
         </div>
         <div className="balance">
           <span className="label">Balance</span>
-          <AnimatedBalance value={balance} />
+          <span className="amount">✈ ${fmtMoney(balance)}</span>
         </div>
       </div>
     </header>

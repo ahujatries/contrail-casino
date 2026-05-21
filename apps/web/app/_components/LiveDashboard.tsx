@@ -5,32 +5,29 @@ import {
   AIRPORT_CODES,
   emptyAllScores,
   getCurrentHourStart,
-  msUntilNextHour,
   type AirportCode,
   type AllScores,
 } from '@airport-pong/shared';
 import { TopBar } from './TopBar';
-import { ScopeCard } from './ScopeCard';
-import { BetMenu } from './BetMenu';
+import { BetStage } from './BetStage';
+import { TrackerPane, type TrackerFlight } from './TrackerPane';
 import { TickerTape, type TickerEvent } from './Ticker';
-import { TotalsStrip, type TodayTotals } from './TotalsStrip';
 import { ToastStack, type Toast } from './BetResolutionToast';
 import { WelcomeModal } from './WelcomeModal';
 import { RefillModal } from './RefillModal';
 import type { ActiveBet } from './ActiveBets';
-import type { LiveFlight } from './FlightTracker';
 
 type Pace = Record<AirportCode, number>;
+type FlightSnippet = { callsign: string | null; typecode: string | null } | null;
 
 type Props = {
   user: { id: string; callsign: string; balance: number };
   featured: [AirportCode, AirportCode];
   initialScores: AllScores;
-  initialTodayTotals: TodayTotals;
   initialEvents: TickerEvent[];
   initialPace: { takeoff: Pace; heavy: Pace; total: Pace };
   initialBets: ActiveBet[];
-  liveFlights: Record<AirportCode, LiveFlight | null>;
+  liveFlights: Record<AirportCode, FlightSnippet>;
 };
 
 type IncomingEvent = {
@@ -64,37 +61,21 @@ export function LiveDashboard({
   user,
   featured,
   initialScores,
-  initialTodayTotals,
   initialEvents,
   initialPace,
   initialBets,
   liveFlights,
 }: Props) {
   const [scores, setScores] = useState<AllScores>(initialScores);
-  const [todayTotals, setTodayTotals] = useState<TodayTotals>(initialTodayTotals);
   const [events, setEvents] = useState<TickerEvent[]>(initialEvents);
   const [pace, setPace] = useState(initialPace);
   const [balance, setBalance] = useState(user.balance);
   const [bets, setBets] = useState<ActiveBet[]>(initialBets);
   const [toasts, setToasts] = useState<Toast[]>([]);
-  const [hourLabel, setHourLabel] = useState('00:00');
 
   const seenEventIds = useRef(new Set<number>(initialEvents.map((e) => e.id)));
   const hourStartRef = useRef(getCurrentHourStart().toISOString());
   const toastIdRef = useRef(1);
-
-  useEffect(() => {
-    const update = () => {
-      const ms = msUntilNextHour();
-      const totalSec = Math.max(0, Math.floor(ms / 1000));
-      const mm = String(Math.floor(totalSec / 60)).padStart(2, '0');
-      const ss = String(totalSec % 60).padStart(2, '0');
-      setHourLabel(`${mm}:${ss}`);
-    };
-    update();
-    const id = setInterval(update, 1000);
-    return () => clearInterval(id);
-  }, []);
 
   const pushToast = (toast: Omit<Toast, 'id'>) => {
     const id = toastIdRef.current++;
@@ -132,19 +113,6 @@ export function LiveDashboard({
         return next;
       });
 
-      setTodayTotals((prev) => {
-        const cur = prev[airport];
-        return {
-          ...prev,
-          [airport]: {
-            takeoff: cur.takeoff + (m.eventType === 'takeoff' ? 1 : 0),
-            landing: cur.landing + (m.eventType === 'landing' ? 1 : 0),
-            heavy: cur.heavy + (m.isHeavy ? 1 : 0),
-            total: cur.total + 1,
-          },
-        };
-      });
-
       setPace((prev) => {
         const bump = 2;
         const next = {
@@ -177,9 +145,7 @@ export function LiveDashboard({
     const handleBetResolved = (m: IncomingBetResolved) => {
       setBets((prev) =>
         prev.map((b) =>
-          b.id === m.betId
-            ? { ...b, status: m.status, resolvedAt: new Date().toISOString() }
-            : b
+          b.id === m.betId ? { ...b, status: m.status, resolvedAt: new Date().toISOString() } : b
         )
       );
       if (m.status === 'won') setBalance((b) => b + m.payout);
@@ -188,11 +154,7 @@ export function LiveDashboard({
         kind: m.status,
         label: m.label,
         amount:
-          m.status === 'won'
-            ? m.payout - m.stake
-            : m.status === 'push'
-              ? m.stake
-              : m.stake,
+          m.status === 'won' ? m.payout - m.stake : m.status === 'push' ? m.stake : m.stake,
       });
     };
 
@@ -216,75 +178,43 @@ export function LiveDashboard({
     return () => es.close();
   }, []);
 
-  // Bet placement happens on per-bet pages; balance updates here via SSE bet_placed.
-
-  const day = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][new Date().getUTCDay()];
+  const onBetPlaced = (newBalance: number) => setBalance(newBalance);
   const openBets = bets.filter((b) => b.status === 'open');
+
+  const trackerFlight: TrackerFlight = {
+    a1: featured[0],
+    a2: featured[1],
+    aPace: pace.total[featured[0]],
+    bPace: pace.total[featured[1]],
+    aTakeoffs: scores.takeoff[featured[0]],
+    bTakeoffs: scores.takeoff[featured[1]],
+    aLandings: Math.max(0, scores.total_ops[featured[0]] - scores.takeoff[featured[0]]),
+    bLandings: Math.max(0, scores.total_ops[featured[1]] - scores.takeoff[featured[1]]),
+  };
 
   return (
     <>
       <div className="app">
         <TopBar callsign={user.callsign} balance={balance} active="home" />
-
-        <section className="hero">
-          <div className="matchup-bar">
-            <div className="matchup-title">
-              <div>
-                <div className="featured">{day} · DAILY MATCHUP · LIVE FLIGHTS</div>
-                <h1>
-                  {featured[0]}
-                  <span className="vs">×</span>
-                  {featured[1]}
-                </h1>
-              </div>
-            </div>
-            <div className="hour-clock">
-              <span
-                style={{
-                  color: 'var(--ink-3)',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.1em',
-                  fontSize: 10.5,
-                }}
-              >
-                Hour resets in
-              </span>
-              <span className="v">{hourLabel}</span>
-            </div>
-          </div>
-
-          <div className="scopes">
-            <ScopeCard
-              airport={featured[0]}
-              other={featured[1]}
-              scores={scores}
-              pace={pace.takeoff[featured[0]]}
-              initialFlight={liveFlights[featured[0]]}
-            />
-            <ScopeCard
-              airport={featured[1]}
-              other={featured[0]}
-              scores={scores}
-              pace={pace.takeoff[featured[1]]}
-              initialFlight={liveFlights[featured[1]]}
-            />
-          </div>
-        </section>
-
-        <BetMenu bets={bets} />
-
-        <footer className="ticker">
-          <TickerTape events={events} />
-          <TotalsStrip totals={todayTotals} featured={featured} />
-        </footer>
+        <main className="stage">
+          <BetStage
+            a1={featured[0]}
+            a2={featured[1]}
+            scores={scores}
+            pace={pace}
+            liveFlights={liveFlights}
+            balance={balance}
+            bets={bets}
+            onPlaced={onBetPlaced}
+          />
+          <TrackerPane flight={trackerFlight} />
+        </main>
+        <TickerTape events={events} />
       </div>
 
       <ToastStack toasts={toasts} />
       <WelcomeModal callsign={user.callsign} />
-      <RefillModal
-        open={balance <= 0 && openBets.length === 0}
-        onRefilled={(b) => setBalance(b)}
-      />
+      <RefillModal open={balance <= 0 && openBets.length === 0} onRefilled={(b) => setBalance(b)} />
     </>
   );
 }
