@@ -195,6 +195,28 @@ function validateBet(type: BetTypeKey, payload: AnyPayload): boolean {
         (p.pickedSide === 'left' || p.pickedSide === 'right')
       );
     }
+    case 'plane_landing_ou': {
+      const p = payload as {
+        airport: AirportCode;
+        icao24: string;
+        lineMinuteIso: string;
+        side: 'over' | 'under';
+        placedAt: string;
+        etaMinAtPlacement: number;
+      };
+      return (
+        AIRPORT_CODES.includes(p.airport) &&
+        typeof p.icao24 === 'string' &&
+        p.icao24.length > 0 &&
+        typeof p.lineMinuteIso === 'string' &&
+        !!Date.parse(p.lineMinuteIso) &&
+        (p.side === 'over' || p.side === 'under') &&
+        typeof p.placedAt === 'string' &&
+        !!Date.parse(p.placedAt) &&
+        typeof p.etaMinAtPlacement === 'number' &&
+        p.etaMinAtPlacement > 0
+      );
+    }
   }
 }
 
@@ -287,6 +309,12 @@ async function currentDecimalOdds(
       const probPick = p.pickedSide === 'left' ? probLeft : 1 - probLeft;
       const fair = Math.min(0.92, Math.max(0.08, probPick));
       return { decimalOdds: (1 / fair) * 0.95 };
+    }
+    case 'plane_landing_ou': {
+      // Near-even money. The system-suggested ETA is the line, so true
+      // 50/50 in expectation; small house edge so the leaderboard isn't
+      // a coin-flip grind.
+      return { decimalOdds: 1.95 };
     }
   }
 }

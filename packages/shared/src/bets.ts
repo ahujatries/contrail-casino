@@ -69,6 +69,26 @@ export type HeavyRacePayload = {
   pairId: string;
 };
 
+/**
+ * Per-plane O/U on landing time. User picks one inbound plane from the
+ * tracker; system suggests ETA as the line; user picks over or under.
+ *  - lineMinuteIso: target timestamp (start of minute, e.g. "...T14:23:00Z")
+ *  - under: lands STRICTLY BEFORE lineMinuteIso  → wins on actual < line
+ *  - over:  lands STRICTLY AFTER  lineMinuteIso  → wins on actual > line
+ *  - exact minute match → push
+ *  - no landing within 60 min of placedAt → push (refund)
+ */
+export type PlaneLandingOuPayload = {
+  airport: AirportCode;
+  icao24: string;
+  callsign: string | null;
+  typecode: string | null;
+  lineMinuteIso: string;
+  side: 'over' | 'under';
+  etaMinAtPlacement: number;
+  placedAt: string;
+};
+
 export type BetPayloadByType = {
   next_event: NextEventPayload;
   next_heavy: NextHeavyPayload;
@@ -78,6 +98,7 @@ export type BetPayloadByType = {
   takeoff_race: TakeoffRacePayload;
   cross_airport_race: CrossAirportRacePayload;
   heavy_race: HeavyRacePayload;
+  plane_landing_ou: PlaneLandingOuPayload;
 };
 
 export type BetTypeKey = keyof BetPayloadByType;
@@ -131,6 +152,12 @@ export const describeBet = (
       const pick = p.pickedSide === 'left' ? p.leftAirport : p.rightAirport;
       const other = p.pickedSide === 'left' ? p.rightAirport : p.leftAirport;
       return `${pick} gets next heavy before ${other}`;
+    }
+    case 'plane_landing_ou': {
+      const p = payload as PlaneLandingOuPayload;
+      const line = new Date(p.lineMinuteIso).toISOString().slice(11, 16); // HH:MM UTC
+      const id = p.callsign ?? p.icao24.toUpperCase();
+      return `${id} (${p.airport}) ${p.side === 'over' ? 'OVER' : 'UNDER'} ${line} UTC landing`;
     }
   }
 };

@@ -5,7 +5,7 @@ import { EventDetector } from './detector.ts';
 import { aircraftDb } from './aircraft-db.ts';
 import { RaceResolver } from './resolver.ts';
 import { writeLiveSnapshot } from './live-snapshot.ts';
-import { resolveOnEvent } from './bet-resolver.ts';
+import { resolveOnEvent, sweepStalePlaneLandingBets } from './bet-resolver.ts';
 import { isHeavyTypecode } from '@airport-pong/shared';
 import { log } from './logger.ts';
 import { health, startHealthServer } from './healthz.ts';
@@ -100,6 +100,7 @@ async function tick(detector: EventDetector) {
           eventType: row.eventType,
           isHeavy: row.isHeavy,
           icao24: row.icao24,
+          occurredAt: row.occurredAt,
         });
       } catch (err) {
         log.error('bet resolve on event failed', { error: String(err) });
@@ -159,6 +160,17 @@ async function main() {
   };
   process.on('SIGINT', stop);
   process.on('SIGTERM', stop);
+
+  // Periodic sweep for stale plane-landing O/U bets (timeout → push).
+  // Independent cadence (every 5 min) so it doesn't piggyback on the
+  // OpenSky tick interval which may back off under 429s.
+  setInterval(() => {
+    sweepStalePlaneLandingBets()
+      .then((n) => {
+        if (n > 0) log.info('[bet-resolver] swept stale plane bets', { count: n });
+      })
+      .catch((err) => log.error('plane-bet sweep failed', { error: String(err) }));
+  }, 5 * 60_000);
 
   // Schedule ticks (allow drift; back off naturally if a tick overruns)
   while (!stopping) {

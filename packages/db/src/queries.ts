@@ -745,6 +745,162 @@ export const getNextLandingForAirport = async (
   };
 };
 
+/**
+ * Compute the system-set O/U line for an airport's hourly total ops.
+ * Looks at the same UTC-hour-of-day across the last 14 days (excluding
+ * the current in-progress hour), averages the per-hour event counts,
+ * and rounds to the nearest 5 to keep lines stable + readable.
+ *
+ * If history is too thin (<3 sample hours), returns a sensible default
+ * based on each airport's published peak ops/hr.
+ */
+const HOURLY_LINE_FALLBACK: Record<AirportCode, number> = {
+  // Rough mid-day peak total-ops per hour from published airport stats.
+  JFK: 90,
+  ORD: 130,
+  ATL: 140,
+  LAX: 100,
+};
+
+export type HourlyLine = {
+  airport: AirportCode;
+  hourStart: string; // ISO
+  hourEnd: string;
+  line: number; // O/U line (rounded to 5)
+  sampleHours: number;
+  rawAvg: number;
+  source: 'history' | 'fallback';
+};
+
+export const getHourlyLineForAirport = async (
+  airport: AirportCode,
+  hourStart: Date
+): Promise<HourlyLine> => {
+  const db = getDb();
+  const hourEnd = new Date(hourStart.getTime() + 60 * 60_000);
+  const hourOfDay = hourStart.getUTCHours();
+  const fourteenDaysAgo = new Date(hourStart.getTime() - 14 * 24 * 60 * 60_000);
+
+  const rows = (await db
+    .select({
+      hourBucket: sql<string>`date_trunc('hour', ${eventsTable.occurredAt})`,
+      ops: sql<number>`count(*)::int`,
+    })
+    .from(eventsTable)
+    .where(
+      and(
+        eq(eventsTable.airport, airport),
+        sql`extract(hour from ${eventsTable.occurredAt} AT TIME ZONE 'UTC') = ${hourOfDay}`,
+        gte(eventsTable.occurredAt, fourteenDaysAgo),
+        lt(eventsTable.occurredAt, hourStart)
+      )
+    )
+    .groupBy(sql`date_trunc('hour', ${eventsTable.occurredAt})`)) as Array<{
+    hourBucket: string;
+    ops: number;
+  }>;
+
+  const sampleHours = rows.length;
+  const rawAvg = sampleHours > 0
+    ? rows.reduce((s, r) => s + r.ops, 0) / sampleHours
+    : 0;
+
+  let line: number;
+  let source: 'history' | 'fallback';
+  if (sampleHours >= 3) {
+    line = Math.max(5, Math.round(rawAvg / 5) * 5);
+    source = 'history';
+  } else {
+    line = HOURLY_LINE_FALLBACK[airport];
+    source = 'fallback';
+  }
+
+  return {
+    airport,
+    hourStart: hourStart.toISOString(),
+    hourEnd: hourEnd.toISOString(),
+    line,
+    sampleHours,
+    rawAvg,
+    source,
+  };
+};
+
+export type InboundPlane = {
+  icao24: string;
+  callsign: string | null;
+  typecode: string | null;
+  isHeavy: boolean;
+  latitude: number;
+  longitude: number;
+  altitudeFt: number | null;
+  velocityKt: number;
+  headingDeg: number;
+  etaMin: number;
+  distanceNm: number;
+  expectedLandingAt: string; // ISO
+};
+
+/**
+ * All planes currently inbound to an airport — airborne, heading the
+ * right direction, within a reasonable approach corridor — sorted by ETA.
+ *
+ * Looser filters than `getNextLandingForAirport` (which returns just the
+ * single tightest candidate). Used for the per-plane O/U bet picker:
+ * users want options, not just one suggestion.
+ */
+export const getInboundPlanesForAirport = async (
+  airport: AirportCode
+): Promise<InboundPlane[]> => {
+  const db = getDb();
+  const center = AIRPORT_CENTERS[airport];
+  const rows = await db
+    .select()
+    .from(liveAircraft)
+    .where(
+      and(
+        eq(liveAircraft.nearestAirport, airport),
+        eq(liveAircraft.onGround, false)
+      )
+    );
+
+  const out: InboundPlane[] = [];
+  for (const r of rows) {
+    if (
+      r.latitude == null ||
+      r.longitude == null ||
+      r.velocityKt == null ||
+      r.headingDeg == null
+    )
+      continue;
+    if (r.altitudeFt != null && r.altitudeFt > 25_000) continue;
+    if (r.velocityKt < 110) continue;
+    const distanceNm = haversineNm(r.latitude, r.longitude, center.lat, center.lng);
+    if (distanceNm > 80) continue;
+    const bear = bearingDeg(r.latitude, r.longitude, center.lat, center.lng);
+    if (Math.abs(angleDiffDeg(r.headingDeg, bear)) > 75) continue;
+    const etaMin = etaMinutes(r.latitude, r.longitude, center.lat, center.lng, r.velocityKt);
+    if (etaMin == null || etaMin <= 1 || etaMin > 45) continue;
+
+    out.push({
+      icao24: r.icao24,
+      callsign: r.callsign,
+      typecode: r.typecode,
+      isHeavy: r.isHeavy,
+      latitude: r.latitude,
+      longitude: r.longitude,
+      altitudeFt: r.altitudeFt,
+      velocityKt: r.velocityKt,
+      headingDeg: r.headingDeg,
+      etaMin,
+      distanceNm,
+      expectedLandingAt: new Date(Date.now() + etaMin * 60_000).toISOString(),
+    });
+  }
+  out.sort((a, b) => a.etaMin - b.etaMin);
+  return out;
+};
+
 export const getLatestTakeoffByAirport = async (
   windowMinutes: number = 30
 ): Promise<Record<AirportCode, FeaturedFlight | null>> => {
