@@ -29,6 +29,8 @@ type Props = {
   featured: { callsign: string | null; typecode: string | null; isHeavy: boolean } | null;
   /** Age of the underlying data in seconds (for the LIVE/STALE indicator). */
   ageSec: number | null;
+  /** Map zoom level. ~13 = ground ops, ~9 = approach corridor, ~8 = wide. Default 9. */
+  zoom?: number;
 };
 
 const TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
@@ -46,6 +48,7 @@ export function MapTracker({
   followIcao24,
   featured,
   ageSec,
+  zoom = 9,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<unknown>(null);
@@ -82,7 +85,7 @@ export function MapTracker({
           container: containerRef.current,
           style: 'mapbox://styles/mapbox/dark-v11',
           center: [center.lng, center.lat],
-          zoom: 8.5,
+          zoom,
           attributionControl: false,
           cooperativeGestures: false,
           pitchWithRotate: false,
@@ -187,9 +190,26 @@ export function MapTracker({
       const mapbox = (await loadMapbox()).default;
       const m = mapRef.current as InstanceType<typeof mapbox.Map> | null;
       if (!m) return;
-      m.easeTo({ center: [plane.longitude!, plane.latitude!], duration: 800 });
+      m.easeTo({ center: [plane.longitude!, plane.latitude!], zoom, duration: 800 });
     })();
-  }, [followIcao24, aircraftSignature, ready, aircraft]);
+  }, [followIcao24, aircraftSignature, ready, aircraft, zoom]);
+
+  // ── Zoom changes (mode switch) — animate to new zoom even without follow ──
+  useEffect(() => {
+    if (!ready || !mapRef.current) return;
+    const center = AIRPORT_CENTERS[airport];
+    (async () => {
+      const mapbox = (await loadMapbox()).default;
+      const m = mapRef.current as InstanceType<typeof mapbox.Map> | null;
+      if (!m) return;
+      // Only re-center to airport if we're not following a plane
+      if (followIcao24) {
+        m.easeTo({ zoom, duration: 700 });
+      } else {
+        m.easeTo({ center: [center.lng, center.lat], zoom, duration: 700 });
+      }
+    })();
+  }, [zoom, airport, ready, followIcao24]);
 
   // ── Stale / error UI ──────────────────────────────────────
   const stale = ageSec != null && ageSec > 60;
