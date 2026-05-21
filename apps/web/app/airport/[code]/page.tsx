@@ -1,9 +1,12 @@
 import { notFound } from 'next/navigation';
 import {
   getActiveBetsForUser,
+  getDepartingPlanesForAirport,
   getHourlyLineForAirport,
+  getHourlyTakeoffLineForAirport,
   getInboundPlanesForAirport,
   getCurrentHourScores,
+  type DepartingPlane,
   type InboundPlane,
 } from '@airport-pong/db';
 import {
@@ -37,10 +40,12 @@ export default async function AirportPage({ params }: { params: Params }) {
   const hourStart = getCurrentHourStart(now);
   const user = await getCurrentUser();
 
-  const [hourly, scores, inbound, userBets] = await Promise.all([
+  const [hourly, hourlyTakeoff, scores, inbound, departing, userBets] = await Promise.all([
     getHourlyLineForAirport(airport, hourStart),
+    getHourlyTakeoffLineForAirport(airport, hourStart),
     getCurrentHourScores(now),
     getInboundPlanesForAirport(airport),
+    getDepartingPlanesForAirport(airport),
     user ? getActiveBetsForUser(user.id) : Promise.resolve([]),
   ]);
 
@@ -74,8 +79,13 @@ export default async function AirportPage({ params }: { params: Params }) {
         sampleHours: hourly.sampleHours,
         lineSource: hourly.source,
         currentCount: scores.total_ops[airport] ?? 0,
+        takeoffLine: hourlyTakeoff.line,
+        takeoffSampleHours: hourlyTakeoff.sampleHours,
+        takeoffLineSource: hourlyTakeoff.source,
+        takeoffCount: scores.takeoff[airport] ?? 0,
       }}
       initialInbound={inbound as InboundPlane[]}
+      initialDeparting={departing as DepartingPlane[]}
       initialBets={initialBets}
     />
   );

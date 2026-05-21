@@ -89,6 +89,26 @@ export type PlaneLandingOuPayload = {
   placedAt: string;
 };
 
+/**
+ * Per-plane O/U on takeoff time. Symmetric to plane_landing_ou but for
+ * planes on the ground that are about to depart. Line = system-estimated
+ * ETT (time to wheels-up) derived from taxi position/velocity.
+ *  - under: takes off BEFORE lineMinuteIso  → wins on actual < line
+ *  - over:  takes off AFTER  lineMinuteIso  → wins on actual > line
+ *  - ±30s of line → push
+ *  - no takeoff within 60 min of placedAt → push (return-to-gate, etc)
+ */
+export type PlaneTakeoffOuPayload = {
+  airport: AirportCode;
+  icao24: string;
+  callsign: string | null;
+  typecode: string | null;
+  lineMinuteIso: string;
+  side: 'over' | 'under';
+  ettMinAtPlacement: number;
+  placedAt: string;
+};
+
 export type BetPayloadByType = {
   next_event: NextEventPayload;
   next_heavy: NextHeavyPayload;
@@ -99,6 +119,7 @@ export type BetPayloadByType = {
   cross_airport_race: CrossAirportRacePayload;
   heavy_race: HeavyRacePayload;
   plane_landing_ou: PlaneLandingOuPayload;
+  plane_takeoff_ou: PlaneTakeoffOuPayload;
 };
 
 export type BetTypeKey = keyof BetPayloadByType;
@@ -158,6 +179,12 @@ export const describeBet = (
       const line = new Date(p.lineMinuteIso).toISOString().slice(11, 16); // HH:MM UTC
       const id = p.callsign ?? p.icao24.toUpperCase();
       return `${id} (${p.airport}) ${p.side === 'over' ? 'OVER' : 'UNDER'} ${line} UTC landing`;
+    }
+    case 'plane_takeoff_ou': {
+      const p = payload as PlaneTakeoffOuPayload;
+      const line = new Date(p.lineMinuteIso).toISOString().slice(11, 16);
+      const id = p.callsign ?? p.icao24.toUpperCase();
+      return `${id} (${p.airport}) ${p.side === 'over' ? 'OVER' : 'UNDER'} ${line} UTC takeoff`;
     }
   }
 };

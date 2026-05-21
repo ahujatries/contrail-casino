@@ -3575,6 +3575,31 @@ body::before {
   flex-direction: column;
   gap: 10px;
 }
+.abet-tabs {
+  display: flex;
+  gap: 4px;
+  margin: -4px -4px 0;
+}
+.abet-tab {
+  flex: 1;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  font-weight: 700;
+  padding: 6px 8px;
+  background: transparent;
+  color: var(--ink-3);
+  border: 1px solid transparent;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+  transition: all 0.10s ease;
+}
+.abet-tab:hover { color: var(--ink-2); }
+.abet-tab.on {
+  border-color: currentColor;
+  border-bottom-color: transparent;
+  background: var(--bg-1);
+}
 .abet-card.plane {
   border-width: 1.5px;
 }

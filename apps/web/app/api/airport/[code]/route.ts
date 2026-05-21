@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import {
   getCurrentHourScores,
   getDb,
+  getDepartingPlanesForAirport,
   getHourlyLineForAirport,
+  getHourlyTakeoffLineForAirport,
   getInboundPlanesForAirport,
   liveAircraft,
 } from '@airport-pong/db';
@@ -44,18 +46,21 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ code: strin
   const minutesIntoHour = (60 * 60_000 - msUntilEnd) / 60_000;
   const locked = minutesIntoHour >= 30;
 
-  const [trafficRows, hourly, scores, inbound, latestRow] = await Promise.all([
-    db
-      .select()
-      .from(liveAircraft)
-      .where(eq(liveAircraft.nearestAirport, airport)),
-    getHourlyLineForAirport(airport, hourStart),
-    getCurrentHourScores(now),
-    getInboundPlanesForAirport(airport),
-    db
-      .select({ ts: sql<string>`max(${liveAircraft.updatedAt})` })
-      .from(liveAircraft),
-  ]);
+  const [trafficRows, hourly, hourlyTakeoff, scores, inbound, departing, latestRow] =
+    await Promise.all([
+      db
+        .select()
+        .from(liveAircraft)
+        .where(eq(liveAircraft.nearestAirport, airport)),
+      getHourlyLineForAirport(airport, hourStart),
+      getHourlyTakeoffLineForAirport(airport, hourStart),
+      getCurrentHourScores(now),
+      getInboundPlanesForAirport(airport),
+      getDepartingPlanesForAirport(airport),
+      db
+        .select({ ts: sql<string>`max(${liveAircraft.updatedAt})` })
+        .from(liveAircraft),
+    ]);
 
   const latest = latestRow[0]?.ts ? new Date(latestRow[0].ts) : null;
   const ageSec = latest ? Math.floor((now.getTime() - latest.getTime()) / 1000) : null;
@@ -82,15 +87,22 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ code: strin
         hourStart: hourly.hourStart,
         hourEnd: hourly.hourEnd,
         msUntilHourEnd: msUntilEnd,
+        // Total-ops O/U (takeoffs + landings)
         line: hourly.line,
         sampleHours: hourly.sampleHours,
         lineSource: hourly.source,
         currentCount: scores.total_ops[airport] ?? 0,
+        // Takeoffs-only O/U
+        takeoffLine: hourlyTakeoff.line,
+        takeoffSampleHours: hourlyTakeoff.sampleHours,
+        takeoffLineSource: hourlyTakeoff.source,
+        takeoffCount: scores.takeoff[airport] ?? 0,
         locked,
       },
       freshness: { latestLiveAircraftAt: latest?.toISOString() ?? null, ageSec },
       traffic,
       inbound,
+      departing,
     },
     {
       headers: {

@@ -2,13 +2,16 @@
 
 import { useMemo, useState, useTransition } from 'react';
 import type { AirportCode } from '@airport-pong/shared';
-import type { InboundPlane } from '@airport-pong/db';
+import type { DepartingPlane, InboundPlane } from '@airport-pong/db';
 import { placeBet } from '../../../actions/place-bet';
+
+type Direction = 'landing' | 'takeoff';
 
 type Props = {
   airport: AirportCode;
   accent: string;
-  plane: InboundPlane;
+  direction: Direction;
+  plane: InboundPlane | DepartingPlane;
   balance: number;
   onBalanceChange: (newBal: number) => void;
   onClose: () => void;
@@ -17,13 +20,14 @@ type Props = {
 const STAKE_PRESETS = [25, 100, 500];
 
 /**
- * Plane landing O/U. System suggests the ETA as the line; user picks
- * over/under. The line is "lands at HH:MM UTC"; under = lands strictly
- * before, over = lands strictly after. Within ±30s → push.
+ * Per-plane landing/takeoff O/U. System suggests ETA (or ETT for taxiing
+ * planes) as the line; user picks over/under. The line is snapped to the
+ * start of the projected minute; ±30s of the line → push.
  */
 export function PlaneBetBox({
   airport,
   accent,
+  direction,
   plane,
   balance,
   onBalanceChange,
@@ -34,36 +38,58 @@ export function PlaneBetBox({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  // Snap the line to the start of the projected landing minute
+  const isLanding = direction === 'landing';
+
+  // Extract the per-direction values
+  const eventEtaMin = isLanding
+    ? (plane as InboundPlane).etaMin
+    : (plane as DepartingPlane).ettMin;
+  const eventTimeIso = isLanding
+    ? (plane as InboundPlane).expectedLandingAt
+    : (plane as DepartingPlane).expectedTakeoffAt;
+
+  // Snap line to start of the projected minute
   const { lineMinuteIso, lineLabel } = useMemo(() => {
-    const eta = new Date(plane.expectedLandingAt);
-    const snapped = new Date(eta);
+    const t = new Date(eventTimeIso);
+    const snapped = new Date(t);
     snapped.setUTCSeconds(0, 0);
     return {
       lineMinuteIso: snapped.toISOString(),
       lineLabel: snapped.toISOString().slice(11, 16),
     };
-  }, [plane.expectedLandingAt]);
+  }, [eventTimeIso]);
 
   const place = () => {
     if (!side) return setError('Pick OVER or UNDER first');
     if (stake <= 0 || stake > balance) return setError('Bad stake');
     setError(null);
     startTransition(async () => {
+      const payload = isLanding
+        ? {
+            airport,
+            icao24: plane.icao24,
+            callsign: plane.callsign,
+            typecode: plane.typecode,
+            lineMinuteIso,
+            side,
+            etaMinAtPlacement: eventEtaMin,
+            placedAt: new Date().toISOString(),
+          }
+        : {
+            airport,
+            icao24: plane.icao24,
+            callsign: plane.callsign,
+            typecode: plane.typecode,
+            lineMinuteIso,
+            side,
+            ettMinAtPlacement: eventEtaMin,
+            placedAt: new Date().toISOString(),
+          };
       const res = await placeBet({
-        type: 'plane_landing_ou',
-        payload: {
-          airport,
-          icao24: plane.icao24,
-          callsign: plane.callsign,
-          typecode: plane.typecode,
-          lineMinuteIso,
-          side,
-          etaMinAtPlacement: plane.etaMin,
-          placedAt: new Date().toISOString(),
-        },
+        type: isLanding ? 'plane_landing_ou' : 'plane_takeoff_ou',
+        payload,
         stake,
-      });
+      } as Parameters<typeof placeBet>[0]);
       if ('ok' in res && res.ok) {
         onBalanceChange(res.newBalance);
         onClose();
@@ -73,22 +99,37 @@ export function PlaneBetBox({
     });
   };
 
+  // Per-direction labels + context
+  const eyebrow = isLanding ? 'PLANE LANDING O/U' : 'PLANE TAKEOFF O/U';
+  const eventVerb = isLanding ? 'lands' : 'takes off';
+  const lineSubtitle = isLanding
+    ? `UTC · ETA ${Math.round(eventEtaMin)}m`
+    : `UTC · ETT ${Math.round(eventEtaMin)}m`;
+  const metaParts: string[] = [];
+  if (plane.typecode) metaParts.push(plane.typecode + (plane.isHeavy ? ' ·H' : ''));
+  if (isLanding) {
+    metaParts.push(`${Math.round((plane as InboundPlane).distanceNm)}nm out`);
+    if ((plane as InboundPlane).altitudeFt != null)
+      metaParts.push(`${(plane as InboundPlane).altitudeFt}ft`);
+    metaParts.push(`${(plane as InboundPlane).velocityKt}kt`);
+  } else {
+    metaParts.push(`taxiing ${(plane as DepartingPlane).velocityKt}kt`);
+  }
+
   return (
     <div className="abet-card plane" style={{ borderColor: accent }}>
       <div className="abet-head">
         <div>
           <div className="abet-eyebrow mono" style={{ color: accent }}>
-            PLANE LANDING O/U · {plane.callsign ?? plane.icao24.toUpperCase()}
+            {eyebrow} · {plane.callsign ?? plane.icao24.toUpperCase()}
           </div>
           <div className="abet-meta mono">
-            {plane.typecode ?? '—'}
-            {plane.isHeavy ? ' ·H' : ''}
-            <span className="sep">·</span>
-            {Math.round(plane.distanceNm)}nm out
-            <span className="sep">·</span>
-            {plane.altitudeFt != null ? `${plane.altitudeFt}ft` : '—'}
-            <span className="sep">·</span>
-            {plane.velocityKt}kt
+            {metaParts.map((p, i) => (
+              <span key={i}>
+                {p}
+                {i < metaParts.length - 1 && <span className="sep">·</span>}
+              </span>
+            ))}
           </div>
         </div>
         <button type="button" className="abet-close" onClick={onClose} aria-label="Close">×</button>
@@ -98,7 +139,7 @@ export function PlaneBetBox({
         <div className="abet-line-block big">
           <div className="k mono">SUGGESTED LINE</div>
           <div className="v line-big">{lineLabel}</div>
-          <div className="line-sub mono">UTC · ETA {Math.round(plane.etaMin)}m</div>
+          <div className="line-sub mono">{lineSubtitle}</div>
         </div>
       </div>
 
@@ -108,20 +149,20 @@ export function PlaneBetBox({
           className={`abet-side under ${side === 'under' ? 'on' : ''}`}
           onClick={() => setSide('under')}
           style={side === 'under' ? { borderColor: accent, background: accent, color: 'white' } : {}}
-          title="Plane lands before this minute"
+          title={`Plane ${eventVerb} before this minute`}
         >
           <span className="abet-side-tag mono">UNDER</span>
-          <span className="abet-side-line">lands before {lineLabel}</span>
+          <span className="abet-side-line">{eventVerb} before {lineLabel}</span>
         </button>
         <button
           type="button"
           className={`abet-side over ${side === 'over' ? 'on' : ''}`}
           onClick={() => setSide('over')}
           style={side === 'over' ? { borderColor: accent, background: accent, color: 'white' } : {}}
-          title="Plane lands after this minute"
+          title={`Plane ${eventVerb} after this minute`}
         >
           <span className="abet-side-tag mono">OVER</span>
-          <span className="abet-side-line">lands after {lineLabel}</span>
+          <span className="abet-side-line">{eventVerb} after {lineLabel}</span>
         </button>
       </div>
 

@@ -206,6 +206,38 @@ export const resolveOnEvent = async (
       });
       await settle(toResolve);
     }
+
+    // Per-plane takeoff O/U bets — same logic as plane_landing_ou but
+    // for takeoff events. Settles by comparing actual takeoff time to
+    // the suggested-ETT line. ±30s of the target minute → push.
+    const planeTakeoffOuBets = await db
+      .select()
+      .from(betsTable)
+      .where(
+        and(
+          eq(betsTable.status, 'open'),
+          eq(betsTable.betType, 'plane_takeoff_ou'),
+          sql`${betsTable.betPayload}->>'icao24' = ${event.icao24}`
+        )
+      );
+    if (planeTakeoffOuBets.length > 0) {
+      const toResolve = planeTakeoffOuBets.map((b) => {
+        const p = b.betPayload as BetPayloadByType['plane_takeoff_ou'];
+        const lineMs = new Date(p.lineMinuteIso).getTime();
+        const actualMs = event.occurredAt.getTime();
+        const delta = actualMs - lineMs;
+        let status: 'won' | 'lost' | 'push';
+        if (Math.abs(delta) <= 30_000) {
+          status = 'push';
+        } else if (delta < 0) {
+          status = p.side === 'under' ? 'won' : 'lost';
+        } else {
+          status = p.side === 'over' ? 'won' : 'lost';
+        }
+        return { bet: b, status, label: describeBet('plane_takeoff_ou', p) };
+      });
+      await settle(toResolve);
+    }
   }
 
   // Heavy-race bets — resolve on ANY heavy movement at either of the chosen airports
@@ -233,8 +265,9 @@ export const resolveOnEvent = async (
 };
 
 /**
- * Auto-push plane_landing_ou bets whose plane never landed within 60 min
- * of placement (cancellation, diversion, OpenSky loss-of-signal, etc).
+ * Auto-push per-plane O/U bets (both landing + takeoff) whose plane
+ * never produced the matching event within 60 min of placement
+ * (cancellation, return-to-gate, diversion, OpenSky loss-of-signal).
  * Refunds the stake. Run periodically by the worker tick.
  */
 export const sweepStalePlaneLandingBets = async (): Promise<number> => {
@@ -247,7 +280,7 @@ export const sweepStalePlaneLandingBets = async (): Promise<number> => {
     .where(
       and(
         eq(betsTable.status, 'open'),
-        eq(betsTable.betType, 'plane_landing_ou'),
+        sql`${betsTable.betType} IN ('plane_landing_ou', 'plane_takeoff_ou')`,
         sql`${betsTable.betPayload}->>'placedAt' < ${sixtyMinAgo}`
       )
     );
@@ -255,11 +288,12 @@ export const sweepStalePlaneLandingBets = async (): Promise<number> => {
   if (stale.length === 0) return 0;
 
   const toResolve = stale.map((b) => {
-    const p = b.betPayload as BetPayloadByType['plane_landing_ou'];
+    const type = b.betType as 'plane_landing_ou' | 'plane_takeoff_ou';
+    const p = b.betPayload as BetPayloadByType[typeof type];
     return {
       bet: b,
       status: 'push' as const,
-      label: describeBet('plane_landing_ou', p) + ' (timeout)',
+      label: describeBet(type, p) + ' (timeout)',
     };
   });
   await settle(toResolve);

@@ -217,6 +217,28 @@ function validateBet(type: BetTypeKey, payload: AnyPayload): boolean {
         p.etaMinAtPlacement > 0
       );
     }
+    case 'plane_takeoff_ou': {
+      const p = payload as {
+        airport: AirportCode;
+        icao24: string;
+        lineMinuteIso: string;
+        side: 'over' | 'under';
+        placedAt: string;
+        ettMinAtPlacement: number;
+      };
+      return (
+        AIRPORT_CODES.includes(p.airport) &&
+        typeof p.icao24 === 'string' &&
+        p.icao24.length > 0 &&
+        typeof p.lineMinuteIso === 'string' &&
+        !!Date.parse(p.lineMinuteIso) &&
+        (p.side === 'over' || p.side === 'under') &&
+        typeof p.placedAt === 'string' &&
+        !!Date.parse(p.placedAt) &&
+        typeof p.ettMinAtPlacement === 'number' &&
+        p.ettMinAtPlacement > 0
+      );
+    }
   }
 }
 
@@ -315,6 +337,12 @@ async function currentDecimalOdds(
       // 50/50 in expectation; small house edge so the leaderboard isn't
       // a coin-flip grind.
       return { decimalOdds: 1.95 };
+    }
+    case 'plane_takeoff_ou': {
+      // Same shape as landing — but takeoff ETT is fuzzier than landing
+      // ETA (taxi queue, runway changes), so we widen the edge slightly
+      // to reflect the lower line confidence.
+      return { decimalOdds: 1.90 };
     }
   }
 }

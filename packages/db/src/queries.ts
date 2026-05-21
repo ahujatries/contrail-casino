@@ -762,6 +762,14 @@ const HOURLY_LINE_FALLBACK: Record<AirportCode, number> = {
   LAX: 100,
 };
 
+const HOURLY_TAKEOFF_LINE_FALLBACK: Record<AirportCode, number> = {
+  // Half of total ops — takeoffs roughly equal landings at steady-state.
+  JFK: 45,
+  ORD: 65,
+  ATL: 70,
+  LAX: 50,
+};
+
 export type HourlyLine = {
   airport: AirportCode;
   hourStart: string; // ISO
@@ -826,6 +834,69 @@ export const getHourlyLineForAirport = async (
   };
 };
 
+/**
+ * Same shape + algorithm as getHourlyLineForAirport but filters to only
+ * takeoff events. Used by the per-airport hourly takeoff O/U bet.
+ */
+export const getHourlyTakeoffLineForAirport = async (
+  airport: AirportCode,
+  hourStart: Date
+): Promise<HourlyLine> => {
+  const db = getDb();
+  const hourEnd = new Date(hourStart.getTime() + 60 * 60_000);
+  const hourOfDay = hourStart.getUTCHours();
+  const fourteenDaysAgo = new Date(hourStart.getTime() - 14 * 24 * 60 * 60_000);
+
+  const rows = (await db
+    .select({
+      hourBucket: sql<string>`date_trunc('hour', ${eventsTable.occurredAt})`,
+      ops: sql<number>`count(*)::int`,
+    })
+    .from(eventsTable)
+    .where(
+      and(
+        eq(eventsTable.airport, airport),
+        eq(eventsTable.eventType, 'takeoff'),
+        sql`extract(hour from ${eventsTable.occurredAt} AT TIME ZONE 'UTC') = ${hourOfDay}`,
+        gte(eventsTable.occurredAt, fourteenDaysAgo),
+        lt(eventsTable.occurredAt, hourStart)
+      )
+    )
+    .groupBy(sql`date_trunc('hour', ${eventsTable.occurredAt})`)) as Array<{
+    hourBucket: string;
+    ops: number;
+  }>;
+
+  const sampleHours = rows.length;
+  const rawAvg = sampleHours > 0
+    ? rows.reduce((s, r) => s + r.ops, 0) / sampleHours
+    : 0;
+
+  let line: number;
+  let source: 'history' | 'fallback';
+  if (sampleHours >= 3) {
+    line = Math.max(5, Math.round(rawAvg / 5) * 5);
+    source = 'history';
+  } else {
+    line = HOURLY_TAKEOFF_LINE_FALLBACK[airport];
+    source = 'fallback';
+  }
+
+  return {
+    airport,
+    hourStart: hourStart.toISOString(),
+    hourEnd: hourEnd.toISOString(),
+    line,
+    sampleHours,
+    rawAvg,
+    source,
+  };
+};
+
+/** Bets close when ETA falls below this threshold — gives users a buffer
+ *  between bet placement and the actual landing event. */
+export const INBOUND_BET_MIN_ETA_MIN = 8;
+
 export type InboundPlane = {
   icao24: string;
   callsign: string | null;
@@ -880,7 +951,7 @@ export const getInboundPlanesForAirport = async (
     const bear = bearingDeg(r.latitude, r.longitude, center.lat, center.lng);
     if (Math.abs(angleDiffDeg(r.headingDeg, bear)) > 75) continue;
     const etaMin = etaMinutes(r.latitude, r.longitude, center.lat, center.lng, r.velocityKt);
-    if (etaMin == null || etaMin <= 1 || etaMin > 45) continue;
+    if (etaMin == null || etaMin <= INBOUND_BET_MIN_ETA_MIN || etaMin > 45) continue;
 
     out.push({
       icao24: r.icao24,
@@ -898,6 +969,74 @@ export const getInboundPlanesForAirport = async (
     });
   }
   out.sort((a, b) => a.etaMin - b.etaMin);
+  return out;
+};
+
+export type DepartingPlane = {
+  icao24: string;
+  callsign: string | null;
+  typecode: string | null;
+  isHeavy: boolean;
+  latitude: number;
+  longitude: number;
+  velocityKt: number;
+  headingDeg: number | null;
+  ettMin: number; // estimated time to wheels-up
+  expectedTakeoffAt: string;
+};
+
+/** Bets close when ETT drops below this — keeps a buffer before takeoff. */
+export const DEPARTING_BET_MIN_ETT_MIN = 4;
+
+/**
+ * All planes currently taxiing at an airport — on ground, moving but not
+ * fast enough to be in the takeoff roll. ETT is a heuristic: faster taxi
+ * speed → closer to runway → sooner takeoff. Rough but honest about it.
+ *
+ * Bets close (plane drops off the list) once ETT ≤ DEPARTING_BET_MIN_ETT_MIN,
+ * so users aren't betting on a plane that's seconds from rotation.
+ */
+export const getDepartingPlanesForAirport = async (
+  airport: AirportCode
+): Promise<DepartingPlane[]> => {
+  const db = getDb();
+  const rows = await db
+    .select()
+    .from(liveAircraft)
+    .where(
+      and(
+        eq(liveAircraft.nearestAirport, airport),
+        eq(liveAircraft.onGround, true)
+      )
+    );
+
+  const out: DepartingPlane[] = [];
+  for (const r of rows) {
+    if (r.velocityKt == null || r.latitude == null || r.longitude == null) continue;
+    // Taxi range: pushback (~3kt) up through normal taxi (~30kt). >35kt
+    // is likely in the takeoff roll — already too late to bet.
+    if (r.velocityKt < 3 || r.velocityKt > 35) continue;
+
+    // Heuristic ETT: faster taxi → closer to runway threshold → sooner
+    // wheels-up. At 30kt assume ~3 min to roll; at 5kt assume ~12 min.
+    // Clamp to [4, 15] so we always show meaningful + bettable lines.
+    const ettMin = Math.max(4, Math.min(15, Math.round(15 - r.velocityKt * 0.35)));
+    if (ettMin <= DEPARTING_BET_MIN_ETT_MIN) continue;
+
+    out.push({
+      icao24: r.icao24,
+      callsign: r.callsign,
+      typecode: r.typecode,
+      isHeavy: r.isHeavy,
+      latitude: r.latitude,
+      longitude: r.longitude,
+      velocityKt: r.velocityKt,
+      headingDeg: r.headingDeg,
+      ettMin,
+      expectedTakeoffAt: new Date(Date.now() + ettMin * 60_000).toISOString(),
+    });
+  }
+  out.sort((a, b) => a.ettMin - b.ettMin);
   return out;
 };
 

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AIRPORT_NAMES, type AirportCode } from '@airport-pong/shared';
-import type { InboundPlane } from '@airport-pong/db';
+import type { DepartingPlane, InboundPlane } from '@airport-pong/db';
 import { TopBar } from '../../../_components/TopBar';
 import { MapTracker, type Aircraft } from '../../../_components/MapTracker';
 import { AtcPlayer } from '../../../_components/AtcPlayer';
@@ -10,7 +10,7 @@ import { ToastStack, type Toast } from '../../../_components/BetResolutionToast'
 import { ActiveBets, type ActiveBet } from '../../../_components/ActiveBets';
 import { RefillModal } from '../../../_components/RefillModal';
 import { HourlyBetBox } from './HourlyBetBox';
-import { InboundPlanesList } from './InboundPlanesList';
+import { PlanesList } from './InboundPlanesList';
 import { PlaneBetBox } from './PlaneBetBox';
 
 const ACCENT: Record<AirportCode, string> = {
@@ -27,6 +27,10 @@ type HourState = {
   sampleHours: number;
   lineSource: 'history' | 'fallback';
   currentCount: number;
+  takeoffLine: number;
+  takeoffSampleHours: number;
+  takeoffLineSource: 'history' | 'fallback';
+  takeoffCount: number;
   msUntilHourEnd?: number;
   locked?: boolean;
 };
@@ -38,6 +42,7 @@ type AirportApiResp = {
   freshness: { latestLiveAircraftAt: string | null; ageSec: number | null };
   traffic: Aircraft[];
   inbound: InboundPlane[];
+  departing: DepartingPlane[];
 };
 
 type Props = {
@@ -45,6 +50,7 @@ type Props = {
   airport: AirportCode;
   initialHour: HourState;
   initialInbound: InboundPlane[];
+  initialDeparting: DepartingPlane[];
   initialBets: ActiveBet[];
 };
 
@@ -55,6 +61,7 @@ export function AirportDashboard({
   airport,
   initialHour,
   initialInbound,
+  initialDeparting,
   initialBets,
 }: Props) {
   const accent = ACCENT[airport];
@@ -70,8 +77,13 @@ export function AirportDashboard({
   });
   const [traffic, setTraffic] = useState<Aircraft[]>([]);
   const [inbound, setInbound] = useState<InboundPlane[]>(initialInbound);
+  const [departing, setDeparting] = useState<DepartingPlane[]>(initialDeparting);
   const [ageSec, setAgeSec] = useState<number | null>(null);
-  const [selectedIcao24, setSelectedIcao24] = useState<string | null>(null);
+  const [selected, setSelected] = useState<
+    | { icao24: string; direction: 'landing' }
+    | { icao24: string; direction: 'takeoff' }
+    | null
+  >(null);
 
   // Live polling for the per-airport endpoint
   useEffect(() => {
@@ -87,6 +99,7 @@ export function AirportDashboard({
         setHour(data.hour);
         setTraffic(data.traffic);
         setInbound(data.inbound);
+        setDeparting(data.departing);
         setAgeSec(data.freshness.ageSec);
       } catch {
         // silent — UI shows STALE pill via ageSec drift
@@ -159,11 +172,17 @@ export function AirportDashboard({
 
   const onBalanceChange = useCallback((newBal: number) => setBalance(newBal), []);
 
-  // The plane currently selected for a plane O/U bet
-  const selectedPlane = useMemo(
-    () => inbound.find((p) => p.icao24 === selectedIcao24) ?? null,
-    [inbound, selectedIcao24]
+  // Resolve selected plane → either inbound or departing record
+  const selectedInbound = useMemo(
+    () => (selected?.direction === 'landing' ? inbound.find((p) => p.icao24 === selected.icao24) ?? null : null),
+    [inbound, selected]
   );
+  const selectedDeparting = useMemo(
+    () => (selected?.direction === 'takeoff' ? departing.find((p) => p.icao24 === selected.icao24) ?? null : null),
+    [departing, selected]
+  );
+  const selectedAny = selectedInbound ?? selectedDeparting;
+  const selectedIcao24 = selected?.icao24 ?? null;
 
   const openBets = bets.filter((b) => b.status === 'open');
 
@@ -204,20 +223,35 @@ export function AirportDashboard({
                 balance={balance}
                 onBalanceChange={onBalanceChange}
               />
-              {selectedPlane ? (
+              {selectedInbound ? (
                 <PlaneBetBox
                   airport={airport}
                   accent={accent}
-                  plane={selectedPlane}
+                  direction="landing"
+                  plane={selectedInbound}
                   balance={balance}
                   onBalanceChange={onBalanceChange}
-                  onClose={() => setSelectedIcao24(null)}
+                  onClose={() => setSelected(null)}
                 />
               ) : null}
-              <InboundPlanesList
-                planes={inbound}
+              {selectedDeparting ? (
+                <PlaneBetBox
+                  airport={airport}
+                  accent={accent}
+                  direction="takeoff"
+                  plane={selectedDeparting}
+                  balance={balance}
+                  onBalanceChange={onBalanceChange}
+                  onClose={() => setSelected(null)}
+                />
+              ) : null}
+              <PlanesList
+                inbound={inbound}
+                departing={departing}
                 selectedIcao24={selectedIcao24}
-                onSelect={setSelectedIcao24}
+                onSelect={(icao, direction) =>
+                  setSelected(icao == null ? null : { icao24: icao, direction })
+                }
                 accent={accent}
               />
               <ActiveBets bets={openBets} />
@@ -230,11 +264,11 @@ export function AirportDashboard({
                   aircraft={traffic}
                   followIcao24={selectedIcao24}
                   featured={
-                    selectedPlane
+                    selectedAny
                       ? {
-                          callsign: selectedPlane.callsign,
-                          typecode: selectedPlane.typecode,
-                          isHeavy: selectedPlane.isHeavy,
+                          callsign: selectedAny.callsign,
+                          typecode: selectedAny.typecode,
+                          isHeavy: selectedAny.isHeavy,
                         }
                       : null
                   }

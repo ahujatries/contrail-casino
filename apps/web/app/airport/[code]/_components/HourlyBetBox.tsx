@@ -11,9 +11,15 @@ type Hour = {
   sampleHours: number;
   lineSource: 'history' | 'fallback';
   currentCount: number;
+  takeoffLine: number;
+  takeoffSampleHours: number;
+  takeoffLineSource: 'history' | 'fallback';
+  takeoffCount: number;
   msUntilHourEnd: number;
   locked: boolean;
 };
+
+type Tab = 'total_ops' | 'takeoff';
 
 type Props = {
   airport: AirportCode;
@@ -26,11 +32,19 @@ type Props = {
 const STAKE_PRESETS = [25, 100, 500];
 
 export function HourlyBetBox({ airport, accent, hour, balance, onBalanceChange }: Props) {
+  const [tab, setTab] = useState<Tab>('total_ops');
   const [side, setSide] = useState<'over' | 'under' | null>(null);
   const [stake, setStake] = useState(100);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  // Reset bet form when switching tabs
+  useEffect(() => {
+    setSide(null);
+    setError(null);
+    setSuccess(null);
+  }, [tab]);
 
   // Hour countdown — defer to client to avoid hydration mismatch
   const [now, setNow] = useState<number | null>(null);
@@ -44,6 +58,11 @@ export function HourlyBetBox({ airport, accent, hour, balance, onBalanceChange }
   const minsLeft = msLeft == null ? null : Math.floor(msLeft / 60_000);
   const secsLeft = msLeft == null ? null : Math.floor((msLeft % 60_000) / 1000);
 
+  // Tab-specific values
+  const line = tab === 'total_ops' ? hour.line : hour.takeoffLine;
+  const currentCount = tab === 'total_ops' ? hour.currentCount : hour.takeoffCount;
+  const lineSource = tab === 'total_ops' ? hour.lineSource : hour.takeoffLineSource;
+
   const place = () => {
     if (!side) return setError('Pick OVER or UNDER first');
     if (stake <= 0 || stake > balance) return setError('Bad stake');
@@ -53,9 +72,9 @@ export function HourlyBetBox({ airport, accent, hour, balance, onBalanceChange }
       const res = await placeBet({
         type: 'race_over_under',
         payload: {
-          raceType: 'total_ops' as RaceType,
+          raceType: tab as RaceType,
           airport,
-          line: hour.line,
+          line,
           side,
           hourStart: hour.hourStart,
         },
@@ -63,7 +82,7 @@ export function HourlyBetBox({ airport, accent, hour, balance, onBalanceChange }
       });
       if ('ok' in res && res.ok) {
         onBalanceChange(res.newBalance);
-        setSuccess(`Bet placed: ${side.toUpperCase()} ${hour.line}`);
+        setSuccess(`Bet placed: ${side.toUpperCase()} ${line} ${tab === 'takeoff' ? 'takeoffs' : 'ops'}`);
         setSide(null);
       } else if ('error' in res) {
         setError(res.error ?? 'Bet failed');
@@ -75,14 +94,35 @@ export function HourlyBetBox({ airport, accent, hour, balance, onBalanceChange }
   const hourEndLabel = new Date(hour.hourEnd).toISOString().slice(11, 16);
   const pace =
     minsLeft != null && minsLeft < 60
-      ? Math.round((hour.currentCount / Math.max(1, 60 - minsLeft)) * 60)
-      : hour.currentCount;
-  const projection = pace; // simple linear projection
+      ? Math.round((currentCount / Math.max(1, 60 - minsLeft)) * 60)
+      : currentCount;
+  const projection = pace;
 
   return (
     <div className="abet-card hourly">
+      <div className="abet-tabs">
+        <button
+          type="button"
+          className={`abet-tab ${tab === 'total_ops' ? 'on' : ''}`}
+          onClick={() => setTab('total_ops')}
+          style={tab === 'total_ops' ? { borderColor: accent, color: accent } : {}}
+        >
+          TOTAL OPS
+        </button>
+        <button
+          type="button"
+          className={`abet-tab ${tab === 'takeoff' ? 'on' : ''}`}
+          onClick={() => setTab('takeoff')}
+          style={tab === 'takeoff' ? { borderColor: accent, color: accent } : {}}
+        >
+          TAKEOFFS
+        </button>
+      </div>
+
       <div className="abet-head">
-        <div className="abet-eyebrow mono">HOURLY OVER/UNDER · TOTAL OPS</div>
+        <div className="abet-eyebrow mono">
+          HOURLY OVER/UNDER · {tab === 'takeoff' ? 'TAKEOFFS ONLY' : 'TAKEOFFS + LANDINGS'}
+        </div>
         <div className="abet-meta mono">
           {hourLabel}–{hourEndLabel} UTC
           {minsLeft != null && (
@@ -93,7 +133,7 @@ export function HourlyBetBox({ airport, accent, hour, balance, onBalanceChange }
               </span>
             </>
           )}
-          {hour.lineSource === 'fallback' && (
+          {lineSource === 'fallback' && (
             <>
               <span className="sep">·</span>
               <span className="note">line: fallback (thin history)</span>
@@ -105,11 +145,11 @@ export function HourlyBetBox({ airport, accent, hour, balance, onBalanceChange }
       <div className="abet-line-row">
         <div className="abet-line-block">
           <div className="k mono">LINE</div>
-          <div className="v line-big">{hour.line}</div>
+          <div className="v line-big">{line}</div>
         </div>
         <div className="abet-line-block">
           <div className="k mono">SO FAR</div>
-          <div className="v">{hour.currentCount}</div>
+          <div className="v">{currentCount}</div>
         </div>
         <div className="abet-line-block">
           <div className="k mono">PROJ</div>
@@ -134,7 +174,7 @@ export function HourlyBetBox({ airport, accent, hour, balance, onBalanceChange }
               style={side === 'over' ? { borderColor: accent, background: accent, color: 'white' } : {}}
             >
               <span className="abet-side-tag mono">OVER</span>
-              <span className="abet-side-line">{hour.line}</span>
+              <span className="abet-side-line">{line}</span>
             </button>
             <button
               type="button"
@@ -143,7 +183,7 @@ export function HourlyBetBox({ airport, accent, hour, balance, onBalanceChange }
               style={side === 'under' ? { borderColor: accent, background: accent, color: 'white' } : {}}
             >
               <span className="abet-side-tag mono">UNDER</span>
-              <span className="abet-side-line">{hour.line}</span>
+              <span className="abet-side-line">{line}</span>
             </button>
           </div>
 
