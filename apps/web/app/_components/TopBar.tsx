@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { FreshnessPill } from './FreshnessPill';
 
-type Route = 'home' | 'bets' | 'bet' | 'tracker' | 'leaderboard' | 'your-bets' | 'about';
+type Route = 'home' | 'bets' | 'bet' | 'tracker' | 'leaderboard' | 'your-bets' | 'about' | 'board';
 
 type Props = {
   callsign: string;
@@ -49,8 +49,9 @@ export function TopBar({ callsign, balance, active = 'home' }: Props) {
       <nav className="nav">
         <a className={active === 'home' ? 'active' : ''} href="/">Live</a>
         <a className={active === 'tracker' ? 'active' : ''} href="/tracker">Tracker</a>
-        <a className={active === 'leaderboard' ? 'active' : ''} href="/leaderboard">Board</a>
+        <a className={active === 'board' ? 'active' : ''} href="/board">Board</a>
         <a className={active === 'your-bets' ? 'active' : ''} href="/bets">Your Bets</a>
+        <a className={active === 'leaderboard' ? 'active' : ''} href="/leaderboard">Leaderboard</a>
         <a className={active === 'about' ? 'active' : ''} href="/about">About</a>
       </nav>
       <div className="topbar-right">
