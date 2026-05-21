@@ -8,13 +8,6 @@ import {
   type AirportCode,
 } from '@airport-pong/shared';
 
-const ACCENT: Record<AirportCode, string> = {
-  JFK: 'oklch(0.42 0.20 258)',
-  ORD: 'oklch(0.52 0.20 32)',
-  ATL: 'oklch(0.50 0.13 175)',
-  LAX: 'oklch(0.45 0.16 305)',
-};
-
 export type ChooserCard = {
   airport: AirportCode;
   line: number;
@@ -31,22 +24,22 @@ type Props = {
 const POLL_MS = 30_000;
 
 /**
- * Home page: 4-airport chooser. Each card shows the airport's current
- * hourly O/U line + so-far count + inbound plane count. Click → that
- * airport's betting page.
+ * Home page: 4 airports rendered as baggage tags hanging from a string.
+ * Each tag is a Link to /airport/[code]. Polls every 30s for fresh
+ * line/count/inbound numbers + projection.
  */
 export function AirportChooser({ initialCards }: Props) {
   const [cards, setCards] = useState<ChooserCard[]>(initialCards);
   const [now, setNow] = useState<number | null>(null);
 
-  // Defer Date.now to client to avoid hydration mismatch on the countdown
+  // Defer Date.now to client (hydration-safe countdown)
   useEffect(() => {
     setNow(Date.now());
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, []);
 
-  // Re-poll every 30s to keep cards fresh
+  // Re-poll every 30s
   useEffect(() => {
     let cancelled = false;
     const tick = async () => {
@@ -79,7 +72,7 @@ export function AirportChooser({ initialCards }: Props) {
         const next = results.filter((x): x is ChooserCard => x !== null);
         if (next.length > 0) setCards(next);
       } catch {
-        // ignore — UI shows stale data, will retry
+        // ignore
       }
     };
     const id = setInterval(tick, POLL_MS);
@@ -89,79 +82,95 @@ export function AirportChooser({ initialCards }: Props) {
     };
   }, []);
 
+  const minsLeft = cards[0] && now != null
+    ? Math.max(0, Math.floor(cards[0].msUntilHourEnd / 60_000))
+    : null;
+  const secsLeft = cards[0] && now != null
+    ? Math.max(0, Math.floor((cards[0].msUntilHourEnd % 60_000) / 1000))
+    : null;
+
   return (
-    <section className="chooser">
-      <header className="chooser-head">
-        <div className="chooser-eyebrow mono">PICK YOUR AIRPORT</div>
-        <h1 className="chooser-title">
-          Bet OVER/UNDER on real planes. Hourly traffic or a specific landing.
+    <div className="picker-inner">
+      <div className="picker-head">
+        <div className="picker-kicker mono">PICK YOUR AIRPORT</div>
+        <h1 className="picker-title">
+          Bet OVER/UNDER on real planes.
+          <br />
+          Hourly traffic or a specific landing.
         </h1>
-        <p className="chooser-sub">
-          Each airport runs its own hourly O/U on total ops + per-plane landing-time bets
-          you build from live tracker data.
+        <p className="picker-sub">
+          Each airport runs its own hourly O/U on total ops, plus per-plane landing-time
+          bets you build from the live inbound queue.
         </p>
-      </header>
-
-      <div className="chooser-grid">
-        {cards.map((c) => {
-          const accent = ACCENT[c.airport];
-          const name = AIRPORT_NAMES[c.airport].replace(/\s*\(.*\)\s*/, '');
-          const minsLeft = Math.max(0, Math.floor(c.msUntilHourEnd / 60_000));
-          const pace = minsLeft < 60
-            ? Math.round((c.currentCount / Math.max(1, 60 - minsLeft)) * 60)
-            : c.currentCount;
-          return (
-            <Link
-              key={c.airport}
-              href={`/airport/${c.airport}`}
-              className={`chooser-card airport-${c.airport.toLowerCase()}`}
-              style={{ borderColor: accent }}
-            >
-              <div className="cc-head">
-                <div className="cc-code mono" style={{ color: accent }}>{c.airport}</div>
-                <div className="cc-status">
-                  {c.locked ? (
-                    <span className="cc-pill locked mono">LOCKED</span>
-                  ) : (
-                    <span className="cc-pill open mono">
-                      <span className="dot" style={{ background: accent }} />
-                      {minsLeft}m
-                    </span>
-                  )}
-                </div>
-              </div>
-              <div className="cc-name mono">{name.toUpperCase()}</div>
-
-              <div className="cc-stats">
-                <div className="cc-stat">
-                  <div className="k mono">LINE</div>
-                  <div className="v" style={{ color: accent }}>{c.line}</div>
-                </div>
-                <div className="cc-stat">
-                  <div className="k mono">SO FAR</div>
-                  <div className="v">{c.currentCount}</div>
-                </div>
-                <div className="cc-stat">
-                  <div className="k mono">PROJ</div>
-                  <div className="v">{pace}</div>
-                </div>
-                <div className="cc-stat">
-                  <div className="k mono">INBOUND</div>
-                  <div className="v">{c.inboundCount}</div>
-                </div>
-              </div>
-
-              <div className="cc-cta mono" style={{ color: accent }}>
-                ENTER {c.airport} →
-              </div>
-            </Link>
-          );
-        })}
       </div>
 
-      <div className="chooser-foot mono">
+      <div className="luggage-rack">
+        <div className="luggage-string" aria-hidden />
+        {cards.map((c, i) => (
+          <BaggageTag key={c.airport} card={c} idx={i} />
+        ))}
+      </div>
+
+      <div className="picker-foot mono">
         UTC HOUR · LINES SET FROM 14-DAY HISTORICAL AVG · BETS LOCK AT XX:30
+        {minsLeft != null && (
+          <>
+            {' · '}
+            {String(minsLeft).padStart(2, '0')}:
+            {String(secsLeft).padStart(2, '0')} LEFT
+          </>
+        )}
       </div>
-    </section>
+    </div>
+  );
+}
+
+function BaggageTag({ card, idx }: { card: ChooserCard; idx: number }) {
+  const airport = card.airport;
+  const name = AIRPORT_NAMES[airport].replace(/\s*\(.*\)\s*/, '');
+  const minsLeft = Math.max(0, Math.floor(card.msUntilHourEnd / 60_000));
+  const pace = minsLeft < 60
+    ? Math.round((card.currentCount / Math.max(1, 60 - minsLeft)) * 60)
+    : card.currentCount;
+
+  return (
+    <Link
+      href={`/airport/${airport}`}
+      className={`baggage-tag airport-${airport.toLowerCase()} tag-${idx}`}
+    >
+      <div className="tag-string" aria-hidden />
+      <div className="tag-hole" aria-hidden />
+      <div className="tag-stripe" />
+
+      <div className="tag-head">
+        <span className="tag-code">{airport}</span>
+        <span className="tag-clock mono">
+          {card.locked ? 'LOCKED' : `${minsLeft}m`}
+        </span>
+      </div>
+
+      <div className="tag-city mono">{name.toUpperCase()}</div>
+
+      <div className="tag-grid">
+        <div className="tag-stat">
+          <div className="k mono">LINE</div>
+          <div className="v">{card.line}</div>
+        </div>
+        <div className="tag-stat">
+          <div className="k mono">SO FAR</div>
+          <div className="v">{card.currentCount}</div>
+        </div>
+        <div className="tag-stat">
+          <div className="k mono">PROJ</div>
+          <div className="v">{pace}</div>
+        </div>
+        <div className="tag-stat">
+          <div className="k mono">INBOUND</div>
+          <div className="v">{card.inboundCount}</div>
+        </div>
+      </div>
+
+      <div className="tag-cta mono">ENTER {airport} →</div>
+    </Link>
   );
 }
