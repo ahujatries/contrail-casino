@@ -5,7 +5,7 @@ import {
   getDb,
   liveAircraft,
 } from '@airport-pong/db';
-import { eq, sql } from 'drizzle-orm';
+import { inArray, sql } from 'drizzle-orm';
 import { AIRPORT_CODES, type AirportCode } from '@airport-pong/shared';
 
 export const runtime = 'nodejs';
@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
   const trafficRows = await db
     .select()
     .from(liveAircraft)
-    .where(sql`${liveAircraft.nearestAirport} = ANY(${airports as unknown as string[]})`);
+    .where(inArray(liveAircraft.nearestAirport, airports as unknown as string[]));
 
   // Group by airport
   const traffic: Record<string, ReturnType<typeof toRow>[]> = {};
