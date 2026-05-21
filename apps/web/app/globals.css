@@ -3234,3 +3234,126 @@ body::before {
   text-transform: uppercase;
   font-weight: 700;
 }
+
+/* ─── Single-canvas tracker with A/B toggle ─── */
+.trk-toggle {
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-1);
+}
+.trk-toggle-btn {
+  appearance: none;
+  background: var(--bg-1);
+  border: 0;
+  border-right: 1px solid var(--line-soft);
+  padding: 10px 14px;
+  cursor: pointer;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  position: relative;
+  transition: background 120ms;
+}
+.trk-toggle-btn:last-child { border-right: 0; }
+.trk-toggle-btn.airport-jfk { --tc: var(--jfk); }
+.trk-toggle-btn.airport-ord { --tc: var(--ord); }
+.trk-toggle-btn.airport-atl { --tc: var(--atl); }
+.trk-toggle-btn.airport-lax { --tc: var(--lax); }
+.trk-toggle-btn:hover:not(.on) { background: var(--bg-2); }
+.trk-toggle-btn.on {
+  background: color-mix(in oklab, var(--tc) 16%, var(--bg-1));
+}
+.trk-toggle-btn.on::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 3px;
+  background: var(--tc);
+}
+.ttb-line1 {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.ttb-tag {
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--ink-3);
+  letter-spacing: 0.12em;
+  padding: 2px 5px;
+  background: var(--bg-2);
+  border-radius: 2px;
+}
+.trk-toggle-btn.on .ttb-tag { background: var(--tc); color: var(--bg-1); }
+.ttb-code {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 19px;
+  color: var(--ink-0);
+  letter-spacing: -0.01em;
+}
+.ttb-led {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--tc);
+  margin-left: auto;
+  align-self: center;
+  opacity: 0.5;
+}
+.trk-toggle-btn.on .ttb-led {
+  opacity: 1;
+  box-shadow: 0 0 8px var(--tc);
+}
+.ttb-line2 {
+  display: flex;
+  gap: 6px;
+  font-size: 10.5px;
+  color: var(--ink-3);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.trk-canvas-wrap {
+  flex: 1 1 auto;
+  min-height: 320px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-2);
+}
+.trk-canvas-wrap > .ft-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.trk-footer {
+  flex-shrink: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--line);
+  background: var(--bg-1);
+  font-size: 10.5px;
+}
+.trk-footer .sep { color: var(--ink-3); opacity: 0.4; }
+.trk-footer .k {
+  color: var(--ink-3);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.trk-footer .v {
+  color: var(--ink-0);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
