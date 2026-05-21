@@ -159,12 +159,19 @@ export function MapTracker({
         const isFeatured = a.icao24 === followIcao24;
         const el = existing ? (existing.getElement() as HTMLDivElement) : buildMarkerEl();
         styleMarker(el, a, isFeatured, accent);
+        // CRITICAL: rotation MUST go through Mapbox's setRotation, not
+        // el.style.transform. Mapbox overwrites the element's transform
+        // on every update with `translate(x, y) rotate(_rotation)` — any
+        // inline rotate() we set gets clobbered, leaving all planes at 0°.
+        const heading = a.headingDeg ?? 0;
         if (existing) {
           existing.setLngLat([a.longitude, a.latitude]);
+          existing.setRotation(heading);
         } else {
           const marker = new mapbox.Marker({
             element: el,
             anchor: 'center',
+            rotation: heading,
             rotationAlignment: 'map',
           })
             .setLngLat([a.longitude, a.latitude])
@@ -268,8 +275,12 @@ export function MapTracker({
 function buildMarkerEl(): HTMLDivElement {
   const el = document.createElement('div');
   el.className = 'ac-marker';
-  el.innerHTML = `<svg viewBox="0 0 14 14" width="14" height="14" xmlns="http://www.w3.org/2000/svg">
-    <path d="M 7 1 L 9.6 9 L 9.6 11 L 7 9.6 L 4.4 11 L 4.4 9 Z" />
+  // Material Design "airplanemode_active" — a real top-down airliner
+  // silhouette (fuselage, swept wings forward, horizontal stabilizer at
+  // tail). Nose at top so heading 0° (north) maps to nose-up; rotation
+  // is applied by Mapbox via marker.setRotation().
+  el.innerHTML = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+    <path d="M21,16V14L13,9V3.5A1.5,1.5 0 0,0 11.5,2A1.5,1.5 0 0,0 10,3.5V9L2,14V16L10,13.5V19L8,20.5V22L11.5,21L15,22V20.5L13,19V13.5L21,16Z" />
   </svg>`;
   return el;
 }
@@ -280,8 +291,7 @@ function styleMarker(
   isFeatured: boolean,
   accent: string
 ) {
-  const heading = a.headingDeg ?? 0;
-  const baseSize = isFeatured ? 22 : a.isHeavy ? 13 : 11;
+  const baseSize = isFeatured ? 24 : a.isHeavy ? 16 : 13;
   const color = isFeatured
     ? accent
     : a.onGround
@@ -291,15 +301,15 @@ function styleMarker(
         : 'oklch(0.92 0.005 250)';
   el.style.width = `${baseSize}px`;
   el.style.height = `${baseSize}px`;
-  el.style.transform = `rotate(${heading}deg)`;
-  el.style.transformOrigin = 'center';
-  el.style.transition = 'transform 0.6s linear';
+  // NOTE: do NOT set transform here. Mapbox writes `translate(x,y) rotate(r)`
+  // to el.style.transform on every update; any inline transform we add gets
+  // clobbered. Rotation flows through marker.setRotation() in the sync loop.
   el.style.cursor = 'pointer';
   el.style.pointerEvents = 'auto';
   el.style.filter = isFeatured
     ? `drop-shadow(0 0 8px ${accent})`
     : a.isHeavy
-      ? 'drop-shadow(0 0 3px oklch(0.85 0.08 80 / 0.6))'
+      ? 'drop-shadow(0 0 3px oklch(0.85 0.08 80 / 0.55))'
       : 'none';
   const svg = el.querySelector('svg');
   if (svg) {
@@ -309,7 +319,7 @@ function styleMarker(
     if (path) {
       path.setAttribute('fill', color);
       path.setAttribute('stroke', isFeatured ? 'oklch(0.98 0.005 250)' : 'transparent');
-      path.setAttribute('stroke-width', isFeatured ? '0.8' : '0');
+      path.setAttribute('stroke-width', isFeatured ? '0.5' : '0');
     }
   }
   el.title = `${a.callsign ?? a.icao24}${a.typecode ? ' · ' + a.typecode : ''}${a.altitudeFt != null ? ' · ' + a.altitudeFt + 'ft' : ''}`;
