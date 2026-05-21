@@ -3452,3 +3452,372 @@ body::before {
   color: var(--bg-1) !important;
   border-color: var(--blue-1);
 }
+
+/* ──────────────────────────────────────────────────────────────────
+   Per-airport betting page (/airport/[code])
+   ────────────────────────────────────────────────────────────────── */
+.stage-airport {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 20px;
+  min-height: 0;
+}
+.airport-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+.airport-head-l {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+.airport-code {
+  font-size: 36px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1;
+}
+.airport-name {
+  font-size: 12px;
+  letter-spacing: 0.20em;
+  color: var(--ink-2);
+}
+.airport-head-r {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.airport-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+}
+.airport-pill .k {
+  color: var(--ink-3);
+}
+.airport-pill .v {
+  color: var(--ink-1);
+  font-weight: 700;
+}
+
+.airport-grid {
+  display: grid;
+  grid-template-columns: minmax(340px, 0.95fr) minmax(380px, 1.1fr);
+  gap: 14px;
+  flex: 1;
+  min-height: 0;
+}
+.airport-col-l {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.airport-col-r {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  overflow: hidden;
+  min-height: 460px;
+}
+.airport-canvas-wrap {
+  flex: 1;
+  position: relative;
+  display: flex;
+  min-height: 0;
+}
+
+@media (max-width: 960px) {
+  .airport-grid {
+    grid-template-columns: 1fr;
+  }
+  .airport-col-r {
+    min-height: 380px;
+  }
+}
+
+/* ───── Bet cards (hourly + plane + inbound list) ───── */
+.abet-card {
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.abet-card.plane {
+  border-width: 1.5px;
+}
+.abet-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.abet-eyebrow {
+  font-size: 9.5px;
+  letter-spacing: 0.20em;
+  color: var(--ink-2);
+  font-weight: 700;
+}
+.abet-meta {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--ink-3);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.abet-meta .sep {
+  opacity: 0.5;
+}
+.abet-meta .urgent {
+  color: var(--neg);
+  font-weight: 700;
+}
+.abet-meta .note {
+  color: var(--ink-3);
+  font-style: italic;
+}
+.abet-close {
+  background: transparent;
+  border: 0;
+  color: var(--ink-3);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+}
+.abet-close:hover { color: var(--ink-1); }
+
+.abet-line-row {
+  display: flex;
+  gap: 12px;
+}
+.abet-line-block {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  background: var(--bg-1);
+  border: 1px solid var(--line-soft);
+  border-radius: 3px;
+}
+.abet-line-block.big { flex: 2; }
+.abet-line-block .k {
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  color: var(--ink-3);
+  font-weight: 700;
+}
+.abet-line-block .v {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--ink-1);
+  line-height: 1.1;
+}
+.abet-line-block .v.line-big {
+  font-size: 28px;
+  letter-spacing: 0.01em;
+}
+.abet-line-block .line-sub {
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  color: var(--ink-3);
+  margin-top: 2px;
+}
+
+.abet-sides {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.abet-side {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  transition: border-color 0.12s ease, transform 0.06s ease;
+}
+.abet-side:hover { border-color: var(--ink-2); }
+.abet-side.on { transform: translateY(-1px); }
+.abet-side-tag {
+  font-size: 10px;
+  letter-spacing: 0.20em;
+  color: var(--ink-2);
+  font-weight: 700;
+}
+.abet-side.on .abet-side-tag {
+  color: inherit;
+}
+.abet-side-line {
+  font-size: 13px;
+  color: var(--ink-1);
+}
+.abet-side.on .abet-side-line {
+  color: inherit;
+  font-weight: 600;
+}
+
+.abet-stake-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.abet-stake-presets {
+  display: flex;
+  gap: 4px;
+}
+.abet-stake-chip {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10.5px;
+  letter-spacing: 0.10em;
+  padding: 6px 9px;
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--ink-2);
+  border-radius: 3px;
+  cursor: pointer;
+}
+.abet-stake-chip.on {
+  border-color: var(--ink-1);
+  color: var(--ink-1);
+  background: var(--bg-1);
+}
+.abet-stake-input {
+  flex: 1;
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  color: var(--ink-1);
+  padding: 6px 10px;
+  border-radius: 3px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.abet-place {
+  width: 100%;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 3px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  letter-spacing: 0.20em;
+  font-weight: 700;
+  color: white;
+  cursor: pointer;
+}
+.abet-place:disabled {
+  background: var(--line) !important;
+  color: var(--ink-3) !important;
+  cursor: not-allowed;
+}
+
+.abet-locked {
+  padding: 14px;
+  border: 1px dashed var(--line);
+  border-radius: 3px;
+  text-align: center;
+  color: var(--ink-2);
+  letter-spacing: 0.16em;
+  font-size: 11px;
+  font-weight: 700;
+}
+.abet-locked-sub {
+  font-size: 9px;
+  color: var(--ink-3);
+  font-weight: 400;
+  letter-spacing: 0.10em;
+  margin-top: 4px;
+}
+
+.abet-msg {
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  padding: 6px 10px;
+  border-radius: 3px;
+}
+.abet-msg.err { background: rgba(220, 60, 60, 0.10); color: var(--neg); }
+.abet-msg.ok { background: rgba(40, 160, 80, 0.10); color: var(--pos); }
+
+.abet-empty {
+  font-size: 11px;
+  color: var(--ink-3);
+  text-align: center;
+  padding: 22px 12px;
+  border: 1px dashed var(--line);
+  border-radius: 3px;
+}
+
+/* ───── Inbound planes list ───── */
+.inbound-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 280px;
+  overflow-y: auto;
+  margin: -4px;
+  padding: 4px;
+}
+.inbound-row {
+  display: grid;
+  grid-template-columns: 80px 60px 50px 60px 40px;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  transition: border-color 0.10s ease, background 0.10s ease;
+}
+.inbound-row:hover { border-color: var(--ink-2); }
+.inbound-row.on {
+  border-width: 1.5px;
+  background: rgba(255, 255, 255, 0.025);
+}
+[data-theme="light"] .inbound-row.on { background: rgba(0, 0, 0, 0.025); }
+.inb-cs {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-1);
+}
+.inb-tc {
+  font-size: 10px;
+  color: var(--ink-2);
+  letter-spacing: 0.06em;
+}
+.inb-eta {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-1);
+  text-align: right;
+}
+.inb-dist, .inb-alt {
+  font-size: 10px;
+  color: var(--ink-3);
+  text-align: right;
+}
