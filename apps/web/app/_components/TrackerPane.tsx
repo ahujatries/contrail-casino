@@ -94,13 +94,7 @@ export function TrackerPane({
           followIcao24={follow}
           featured={featured}
           ageSec={ageSec}
-          zoom={
-            mode === 'takeoff'
-              ? 13 // tight on the airport — see taxiways + runways
-              : mode === 'landing'
-                ? 9.2 // see the ~30nm approach corridor
-                : 8 // hour: wide view of the area
-          }
+          zoom={12 /* unified — full airport + ~5nm surrounding context */}
         />
       </div>
 

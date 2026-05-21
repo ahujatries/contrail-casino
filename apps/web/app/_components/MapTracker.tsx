@@ -29,7 +29,7 @@ type Props = {
   featured: { callsign: string | null; typecode: string | null; isHeavy: boolean } | null;
   /** Age of the underlying data in seconds (for the LIVE/STALE indicator). */
   ageSec: number | null;
-  /** Map zoom level. ~13 = ground ops, ~9 = approach corridor, ~8 = wide. Default 9. */
+  /** Map zoom level. 12 = standard view (whole airport + ~5nm surrounds). Default 12. */
   zoom?: number;
 };
 
@@ -48,7 +48,7 @@ export function MapTracker({
   followIcao24,
   featured,
   ageSec,
-  zoom = 9,
+  zoom = 12,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<unknown>(null);

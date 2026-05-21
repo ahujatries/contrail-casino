@@ -239,7 +239,7 @@ export function AirportDashboard({
                       : null
                   }
                   ageSec={ageSec}
-                  zoom={selectedIcao24 ? 9.2 : 8.5}
+                  zoom={12 /* unified — full airport + ~5nm surrounding context */}
                 />
               </div>
               <AtcPlayer airport={airport} mode="landing" accent={accent} />
