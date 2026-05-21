@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { MapTracker, type Aircraft } from './MapTracker';
 import { AtcPlayer } from './AtcPlayer';
+import { LiveCam } from './LiveCam';
 import { AIRPORT_NAMES, type AirportCode } from '@airport-pong/shared';
 
 type FeaturedPlane = {
@@ -43,6 +44,7 @@ export function TrackerPane({
   scores,
 }: Props) {
   const [side, setSide] = useState<'a' | 'b'>('a');
+  const [view, setView] = useState<'map' | 'cam'>('map');
   const airport = side === 'a' ? a1 : a2;
   const aircraft = traffic[airport] ?? [];
   const featured = featuredPlanes[airport] ?? null;
@@ -85,23 +87,50 @@ export function TrackerPane({
         />
       </div>
 
+      <div className="trk-viewtoggle" role="tablist" aria-label="Tracker view">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={view === 'map'}
+          className={`trk-view-btn ${view === 'map' ? 'on' : ''}`}
+          onClick={() => setView('map')}
+          style={view === 'map' ? { borderColor: ACCENT[airport], color: ACCENT[airport] } : {}}
+        >
+          MAP
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={view === 'cam'}
+          className={`trk-view-btn ${view === 'cam' ? 'on' : ''}`}
+          onClick={() => setView('cam')}
+          style={view === 'cam' ? { borderColor: ACCENT[airport], color: ACCENT[airport] } : {}}
+        >
+          LIVE CAM
+        </button>
+      </div>
+
       <div className={`trk-canvas-wrap airport-${airport.toLowerCase()}`}>
-        <MapTracker
-          key={airport}
-          airport={airport}
-          accent={ACCENT[airport]}
-          aircraft={aircraft}
-          followIcao24={follow}
-          featured={featured}
-          ageSec={ageSec}
-          zoom={
-            mode === 'takeoff'
-              ? 13 // tight on the airport — see taxiways + runways
-              : mode === 'landing'
-                ? 9.2 // see the ~30nm approach corridor
-                : 8 // hour: wide view of the area
-          }
-        />
+        {view === 'map' ? (
+          <MapTracker
+            key={airport}
+            airport={airport}
+            accent={ACCENT[airport]}
+            aircraft={aircraft}
+            followIcao24={follow}
+            featured={featured}
+            ageSec={ageSec}
+            zoom={
+              mode === 'takeoff'
+                ? 13 // tight on the airport — see taxiways + runways
+                : mode === 'landing'
+                  ? 9.2 // see the ~30nm approach corridor
+                  : 8 // hour: wide view of the area
+            }
+          />
+        ) : (
+          <LiveCam key={`cam-${airport}`} airport={airport} accent={ACCENT[airport]} />
+        )}
       </div>
 
       <AtcPlayer airport={airport} mode={mode} accent={ACCENT[airport]} />
