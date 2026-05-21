@@ -25,8 +25,16 @@ type Props = {
   featured: LiveFlight | null;
 };
 
-const POLL_MS = 15_000;
+// Matches the worker cadence — pulling faster than the data refreshes is wasted I/O.
+const POLL_MS = 30_000;
 const TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+
+// Module-level cache so we don't re-`import('mapbox-gl')` on every marker sync.
+let _mapboxPromise: Promise<typeof import('mapbox-gl')> | null = null;
+const loadMapbox = () => {
+  if (!_mapboxPromise) _mapboxPromise = import('mapbox-gl');
+  return _mapboxPromise;
+};
 
 /**
  * Real Mapbox dark map showing every aircraft `live_aircraft` has tagged
@@ -51,7 +59,7 @@ export function MapTracker({ airport, accent, featured }: Props) {
     let cancelled = false;
     let resizeObserver: ResizeObserver | null = null;
     (async () => {
-      const mapbox = (await import('mapbox-gl')).default;
+      const mapbox = (await loadMapbox()).default;
       if (cancelled || !containerRef.current) return;
       mapbox.accessToken = TOKEN;
       const center = AIRPORT_CENTERS[airport];
@@ -131,16 +139,18 @@ export function MapTracker({ airport, accent, featured }: Props) {
     };
   }, [airport]);
 
-  // Sync markers to current aircraft set
+  // Sync markers to current aircraft set.
+  // We use the module-level cached mapbox import so this doesn't pay the
+  // dynamic-import promise cost every 30s. We also early-exit if the
+  // icao24 set hasn't changed AND no positions have moved meaningfully.
+  const aircraftSignature = aircraft
+    .map((a) => `${a.icao24}|${a.latitude?.toFixed(3)}|${a.longitude?.toFixed(3)}|${a.headingDeg ?? 0}|${a.onGround ? 1 : 0}`)
+    .join(',');
   useEffect(() => {
     if (!ready || !mapRef.current) return;
-    const map = mapRef.current as {
-      getContainer: () => HTMLDivElement;
-    };
-    void map; // satisfy noUnusedLocals
 
     (async () => {
-      const mapbox = (await import('mapbox-gl')).default;
+      const mapbox = (await loadMapbox()).default;
       const m = mapRef.current as InstanceType<typeof mapbox.Map> | null;
       if (!m) return;
 
@@ -171,7 +181,7 @@ export function MapTracker({ airport, accent, featured }: Props) {
         }
       }
     })();
-  }, [aircraft, ready, accent]);
+  }, [aircraftSignature, ready, accent, aircraft]);
 
   if (!TOKEN) {
     return (

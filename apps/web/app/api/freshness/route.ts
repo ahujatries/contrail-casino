@@ -33,6 +33,6 @@ export async function GET() {
       eventsLatestAt: eventTs?.toISOString() ?? null,
       eventsAgeSec: eventTs ? Math.floor((now - eventTs.getTime()) / 1000) : null,
     },
-    { headers: { 'Cache-Control': 'no-store' } }
+    { headers: { 'Cache-Control': 'public, max-age=10, stale-while-revalidate=30' } }
   );
 }

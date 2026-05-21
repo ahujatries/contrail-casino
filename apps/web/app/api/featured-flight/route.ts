@@ -13,6 +13,10 @@ export async function GET(req: NextRequest) {
   const flight = await getFeaturedFlightForAirport(airport);
   return NextResponse.json(
     { flight, fetchedAt: new Date().toISOString() },
-    { headers: { 'Cache-Control': 'no-store' } }
+    {
+      headers: {
+        'Cache-Control': 'public, max-age=10, stale-while-revalidate=20',
+      },
+    }
   );
 }

@@ -30,6 +30,12 @@ export async function GET(req: NextRequest) {
       })),
       fetchedAt: new Date().toISOString(),
     },
-    { headers: { 'Cache-Control': 'no-store' } }
+    {
+      headers: {
+        // Worker writes a new snapshot every 30s — let the browser/CDN serve
+        // a cached response in between. stale-while-revalidate keeps it snappy.
+        'Cache-Control': 'public, max-age=10, stale-while-revalidate=20',
+      },
+    }
   );
 }
