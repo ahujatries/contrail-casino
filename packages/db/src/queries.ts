@@ -633,6 +633,118 @@ export const getFeaturedFlightForAirport = async (
   return null;
 };
 
+export type DuelTakeoffFlight = {
+  icao24: string;
+  callsign: string | null;
+  typecode: string | null;
+  isHeavy: boolean;
+  velocityKt: number;
+  headingDeg: number | null;
+};
+
+export type DuelLandingFlight = {
+  icao24: string;
+  callsign: string | null;
+  typecode: string | null;
+  isHeavy: boolean;
+  velocityKt: number;
+  altitudeFt: number | null;
+  headingDeg: number | null;
+  etaMin: number;
+  distanceNm: number;
+  expectedLandingAt: string;
+};
+
+/**
+ * "Next to depart" plane for the home page duel — the airport's highest-velocity
+ * on-ground aircraft, which is almost certainly taxiing toward (or sitting at)
+ * the runway threshold.
+ */
+export const getNextTakeoffForAirport = async (
+  airport: AirportCode
+): Promise<DuelTakeoffFlight | null> => {
+  const db = getDb();
+  const rows = await db
+    .select()
+    .from(liveAircraft)
+    .where(
+      and(
+        eq(liveAircraft.nearestAirport, airport),
+        eq(liveAircraft.onGround, true)
+      )
+    );
+
+  let best: (typeof rows)[number] | null = null;
+  for (const r of rows) {
+    if (r.velocityKt == null) continue;
+    if (r.velocityKt < 5 || r.velocityKt > 60) continue;
+    if (!best || (r.velocityKt ?? 0) > (best.velocityKt ?? 0)) best = r;
+  }
+  if (!best) return null;
+  return {
+    icao24: best.icao24,
+    callsign: best.callsign,
+    typecode: best.typecode,
+    isHeavy: best.isHeavy,
+    velocityKt: best.velocityKt!,
+    headingDeg: best.headingDeg,
+  };
+};
+
+/**
+ * "Next to land" plane — the lowest-ETA airborne aircraft approaching this
+ * airport, using the same approach filter as the Landing Race candidate query.
+ */
+export const getNextLandingForAirport = async (
+  airport: AirportCode
+): Promise<DuelLandingFlight | null> => {
+  const db = getDb();
+  const center = AIRPORT_CENTERS[airport];
+  const rows = await db
+    .select()
+    .from(liveAircraft)
+    .where(
+      and(
+        eq(liveAircraft.nearestAirport, airport),
+        eq(liveAircraft.onGround, false)
+      )
+    );
+
+  let best: { row: (typeof rows)[number]; etaMin: number; dist: number } | null = null;
+  for (const r of rows) {
+    if (
+      r.latitude == null ||
+      r.longitude == null ||
+      r.velocityKt == null ||
+      r.headingDeg == null
+    )
+      continue;
+    if (r.altitudeFt != null && r.altitudeFt > 18_000) continue;
+    if (r.velocityKt < 120) continue;
+    const dist = haversineNm(r.latitude, r.longitude, center.lat, center.lng);
+    if (dist > 60) continue;
+    const bear = bearingDeg(r.latitude, r.longitude, center.lat, center.lng);
+    if (Math.abs(angleDiffDeg(r.headingDeg, bear)) > 65) continue;
+    const eta = etaMinutes(r.latitude, r.longitude, center.lat, center.lng, r.velocityKt);
+    if (eta == null || eta <= 0.5 || eta > 30) continue;
+    if (!best || eta < best.etaMin) best = { row: r, etaMin: eta, dist };
+  }
+  if (!best) return null;
+  const r = best.row;
+  return {
+    icao24: r.icao24,
+    callsign: r.callsign,
+    typecode: r.typecode,
+    isHeavy: r.isHeavy,
+    velocityKt: r.velocityKt!,
+    altitudeFt: r.altitudeFt,
+    headingDeg: r.headingDeg,
+    etaMin: best.etaMin,
+    distanceNm: best.dist,
+    expectedLandingAt: new Date(Date.now() + best.etaMin * 60_000).toISOString(),
+  };
+};
+
 export const getLatestTakeoffByAirport = async (
   windowMinutes: number = 30
 ): Promise<Record<AirportCode, FeaturedFlight | null>> => {

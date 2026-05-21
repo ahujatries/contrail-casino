@@ -1,7 +1,8 @@
 import {
   getActiveBetsForUser,
   getCurrentHourScores,
-  getFeaturedFlightForAirport,
+  getNextLandingForAirport,
+  getNextTakeoffForAirport,
   getPaceByAirport,
   getRecentEvents,
 } from '@airport-pong/db';
@@ -9,26 +10,38 @@ import { AIRPORT_CODES, getFeatureMatchup, type AirportCode } from '@airport-pon
 import { getCurrentUser } from '../lib/session';
 import { LiveDashboard } from './_components/LiveDashboard';
 import type { ActiveBet } from './_components/ActiveBets';
+import type { DuelLandingFlight, DuelTakeoffFlight } from '@airport-pong/db';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
-
-type LiveFlight = { callsign: string | null; typecode: string | null };
 
 export default async function Page() {
   const now = new Date();
   const featured = getFeatureMatchup(now);
   const user = await getCurrentUser();
 
-  const [scores, recent, takeoffPace, heavyPace, totalPace, userBets, fA, fB] = await Promise.all([
+  const [
+    scores,
+    recent,
+    takeoffPace,
+    heavyPace,
+    totalPace,
+    userBets,
+    toA,
+    toB,
+    ldgA,
+    ldgB,
+  ] = await Promise.all([
     getCurrentHourScores(now),
     getRecentEvents(25),
     getPaceByAirport(30, 'takeoff'),
     getPaceByAirport(60, 'heavy'),
     getPaceByAirport(30, 'all'),
     user ? getActiveBetsForUser(user.id) : Promise.resolve([]),
-    getFeaturedFlightForAirport(featured[0]),
-    getFeaturedFlightForAirport(featured[1]),
+    getNextTakeoffForAirport(featured[0]),
+    getNextTakeoffForAirport(featured[1]),
+    getNextLandingForAirport(featured[0]),
+    getNextLandingForAirport(featured[1]),
   ]);
 
   const initialEvents = recent.map((e) => ({
@@ -52,14 +65,17 @@ export default async function Page() {
     resolvedAt: b.resolvedAt ? b.resolvedAt.toISOString() : null,
   }));
 
-  const liveFlights: Record<AirportCode, LiveFlight | null> = {
-    JFK: null,
-    ORD: null,
-    ATL: null,
-    LAX: null,
+  const takeoffFlights: Record<AirportCode, DuelTakeoffFlight | null> = {
+    JFK: null, ORD: null, ATL: null, LAX: null,
   };
-  if (fA) liveFlights[featured[0]] = { callsign: fA.callsign, typecode: fA.typecode };
-  if (fB) liveFlights[featured[1]] = { callsign: fB.callsign, typecode: fB.typecode };
+  takeoffFlights[featured[0]] = toA;
+  takeoffFlights[featured[1]] = toB;
+
+  const landingFlights: Record<AirportCode, DuelLandingFlight | null> = {
+    JFK: null, ORD: null, ATL: null, LAX: null,
+  };
+  landingFlights[featured[0]] = ldgA;
+  landingFlights[featured[1]] = ldgB;
 
   if (!user) {
     return (
@@ -67,11 +83,6 @@ export default async function Page() {
         <div className="screen-inner">Setting up your callsign… refresh the page.</div>
       </main>
     );
-  }
-
-  // Make sure all 4 airports have entries (LiveDashboard passes through to the BetStage)
-  for (const c of AIRPORT_CODES) {
-    if (!(c in liveFlights)) liveFlights[c] = null;
   }
 
   return (
@@ -82,7 +93,8 @@ export default async function Page() {
       initialEvents={initialEvents}
       initialPace={{ takeoff: takeoffPace, heavy: heavyPace, total: totalPace }}
       initialBets={initialBets}
-      liveFlights={liveFlights}
+      takeoffFlights={takeoffFlights}
+      landingFlights={landingFlights}
     />
   );
 }

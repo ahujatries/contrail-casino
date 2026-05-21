@@ -16,9 +16,9 @@ import { ToastStack, type Toast } from './BetResolutionToast';
 import { WelcomeModal } from './WelcomeModal';
 import { RefillModal } from './RefillModal';
 import type { ActiveBet } from './ActiveBets';
+import type { DuelLandingFlight, DuelTakeoffFlight } from '@airport-pong/db';
 
 type Pace = Record<AirportCode, number>;
-type FlightSnippet = { callsign: string | null; typecode: string | null } | null;
 
 type Props = {
   user: { id: string; callsign: string; balance: number };
@@ -27,7 +27,8 @@ type Props = {
   initialEvents: TickerEvent[];
   initialPace: { takeoff: Pace; heavy: Pace; total: Pace };
   initialBets: ActiveBet[];
-  liveFlights: Record<AirportCode, FlightSnippet>;
+  takeoffFlights: Record<AirportCode, DuelTakeoffFlight | null>;
+  landingFlights: Record<AirportCode, DuelLandingFlight | null>;
 };
 
 type IncomingEvent = {
@@ -64,7 +65,8 @@ export function LiveDashboard({
   initialEvents,
   initialPace,
   initialBets,
-  liveFlights,
+  takeoffFlights,
+  landingFlights,
 }: Props) {
   const [scores, setScores] = useState<AllScores>(initialScores);
   const [events, setEvents] = useState<TickerEvent[]>(initialEvents);
@@ -202,7 +204,8 @@ export function LiveDashboard({
             a2={featured[1]}
             scores={scores}
             pace={pace}
-            liveFlights={liveFlights}
+            takeoffFlights={takeoffFlights}
+            landingFlights={landingFlights}
             balance={balance}
             bets={bets}
             onPlaced={onBetPlaced}

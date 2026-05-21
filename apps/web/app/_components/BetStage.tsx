@@ -12,6 +12,7 @@ import {
 } from '@airport-pong/shared';
 import { placeBet } from '../actions/place-bet';
 import type { ActiveBet } from './ActiveBets';
+import type { DuelLandingFlight, DuelTakeoffFlight } from '@airport-pong/db';
 import { BetTimer } from './BetTimer';
 
 type Pace = Record<AirportCode, number>;
@@ -30,32 +31,25 @@ const MODES: Array<{ id: Mode; label: string; verb: string; noun: string }> = [
 
 type Side = 'a' | 'b';
 
-type FlightSnippet = { callsign: string | null; typecode: string | null } | null;
-
 type Props = {
   a1: AirportCode;
   a2: AirportCode;
   scores: AllScores;
   pace: { takeoff: Pace; heavy: Pace; total: Pace };
-  liveFlights: Record<AirportCode, FlightSnippet>;
+  takeoffFlights: Record<AirportCode, DuelTakeoffFlight | null>;
+  landingFlights: Record<AirportCode, DuelLandingFlight | null>;
   balance: number;
   bets: ActiveBet[];
   onPlaced?: (newBalance: number) => void;
 };
 
-/**
- * Home stage: matchup header, mode switch, two PlaneCards, place bar, active bets.
- * Maps to existing backend bet types:
- *   takeoff → next_event on picked airport
- *   landing → next_event on picked airport (no `next_landing` type yet)
- *   hour    → race_winner total_ops on picked airport
- */
 export function BetStage({
   a1,
   a2,
   scores,
   pace,
-  liveFlights,
+  takeoffFlights,
+  landingFlights,
   balance,
   bets,
   onPlaced,
@@ -81,7 +75,6 @@ export function BetStage({
     return () => clearInterval(id);
   }, []);
 
-  // Live odds for the duel between a1 vs a2 under the current mode
   const { oA, oB } = useMemo(() => odds(a1, a2, mode, scores, pace), [a1, a2, mode, scores, pace]);
   const currentOdds = side === 'a' ? oA : oB;
   const dec = decimalFromAmerican(currentOdds);
@@ -100,7 +93,6 @@ export function BetStage({
       return;
     }
 
-    // Map duel mode to a real backend bet
     let payload: { type: BetTypeKey; data: BetPayloadByType[BetTypeKey] };
     if (mode === 'hour') {
       payload = {
@@ -112,11 +104,7 @@ export function BetStage({
         },
       };
     } else {
-      // Takeoff and Landing both map to next_event for the picked airport
-      payload = {
-        type: 'next_event',
-        data: { airport: pickedKey },
-      };
+      payload = { type: 'next_event', data: { airport: pickedKey } };
     }
 
     setPending(true);
@@ -139,9 +127,7 @@ export function BetStage({
   return (
     <section className="stage-bet">
       <div className="explain">
-        <div className="micro mono">
-          {dayOfWeek} · MATCHUP · LIVE
-        </div>
+        <div className="micro mono">{dayOfWeek} · MATCHUP · LIVE</div>
         <h1 className="bigmatch">
           <span className={`apc apc-${a1.toLowerCase()}`}>{a1}</span>
           <span className="vs">vs</span>
@@ -172,7 +158,8 @@ export function BetStage({
           airport={a1}
           side="left"
           mode={mode}
-          live={liveFlights[a1]}
+          takeoff={takeoffFlights[a1]}
+          landing={landingFlights[a1]}
           score={scores}
           pace={pace.total[a1]}
           picked={side === 'a'}
@@ -202,7 +189,8 @@ export function BetStage({
           airport={a2}
           side="right"
           mode={mode}
-          live={liveFlights[a2]}
+          takeoff={takeoffFlights[a2]}
+          landing={landingFlights[a2]}
           score={scores}
           pace={pace.total[a2]}
           picked={side === 'b'}
@@ -214,8 +202,13 @@ export function BetStage({
       <PlaceBar
         picked={pickedKey}
         opp={oppKey}
-        live={liveFlights[pickedKey]}
-        mode={mode}
+        live={
+          mode === 'takeoff'
+            ? takeoffFlights[pickedKey]
+            : mode === 'landing'
+              ? landingFlights[pickedKey]
+              : null
+        }
         modeMeta={modeMeta}
         odds={currentOdds}
         dec={dec}
@@ -239,7 +232,8 @@ function PlaneCard({
   airport,
   side,
   mode,
-  live,
+  takeoff,
+  landing,
   score,
   pace,
   picked,
@@ -249,7 +243,8 @@ function PlaneCard({
   airport: AirportCode;
   side: 'left' | 'right';
   mode: Mode;
-  live: FlightSnippet;
+  takeoff: DuelTakeoffFlight | null;
+  landing: DuelLandingFlight | null;
   score: AllScores;
   pace: number;
   picked: boolean;
@@ -277,20 +272,59 @@ function PlaneCard({
         </div>
       </div>
 
-      {!isHour && (
+      {mode === 'takeoff' && (
         <div className="pc-plane">
-          <div className="pc-plane-label mono">
-            {mode === 'takeoff' ? 'NEXT TO DEPART' : 'ON FINAL APPROACH'}
-          </div>
-          <div className="pc-plane-cs">{live?.callsign ?? '—'}</div>
-          <div className="pc-plane-meta mono">
-            <span>{live?.typecode ?? 'aircraft'}</span>
-            <span className="sep">·</span>
-            <span>{pace.toFixed(0)}/h pace</span>
-          </div>
-          <div className="pc-plane-eta mono">
-            {mode === 'takeoff' ? 'queued for departure' : 'inbound from feeder'}
-          </div>
+          <div className="pc-plane-label mono">NEXT TO DEPART · {airport}</div>
+          {takeoff ? (
+            <>
+              <div className="pc-plane-cs">{takeoff.callsign ?? takeoff.icao24.toUpperCase()}</div>
+              <div className="pc-plane-meta mono">
+                <span>{takeoff.typecode ?? 'aircraft'}</span>
+                <span className="sep">·</span>
+                <span>{takeoff.velocityKt}kt taxi</span>
+                {takeoff.isHeavy && (
+                  <>
+                    <span className="sep">·</span>
+                    <span style={{ color: 'var(--warn)' }}>HVY</span>
+                  </>
+                )}
+              </div>
+              <div className="pc-plane-eta mono">
+                queued · {pace.toFixed(0)}/h dep pace
+              </div>
+            </>
+          ) : (
+            <EmptyCard kind="takeoff" pace={pace} />
+          )}
+        </div>
+      )}
+
+      {mode === 'landing' && (
+        <div className="pc-plane">
+          <div className="pc-plane-label mono">ON FINAL APPROACH · {airport}</div>
+          {landing ? (
+            <>
+              <div className="pc-plane-cs">{landing.callsign ?? landing.icao24.toUpperCase()}</div>
+              <div className="pc-plane-meta mono">
+                <span>{landing.typecode ?? 'aircraft'}</span>
+                <span className="sep">·</span>
+                <span>{Math.round(landing.distanceNm)}nm out</span>
+                <span className="sep">·</span>
+                <span>{landing.altitudeFt != null ? `${landing.altitudeFt}ft` : 'descent'}</span>
+                {landing.isHeavy && (
+                  <>
+                    <span className="sep">·</span>
+                    <span style={{ color: 'var(--warn)' }}>HVY</span>
+                  </>
+                )}
+              </div>
+              <div className="pc-plane-eta mono">
+                touchdown ~{landing.etaMin.toFixed(1)}m ({landing.expectedLandingAt.slice(11, 19)}Z)
+              </div>
+            </>
+          ) : (
+            <EmptyCard kind="landing" pace={pace} />
+          )}
         </div>
       )}
 
@@ -316,6 +350,20 @@ function PlaneCard({
   );
 }
 
+function EmptyCard({ kind, pace }: { kind: 'takeoff' | 'landing'; pace: number }) {
+  return (
+    <>
+      <div className="pc-plane-cs" style={{ color: 'var(--ink-2)' }}>—</div>
+      <div className="pc-plane-meta mono">
+        <span>
+          {kind === 'takeoff' ? 'no plane currently taxiing' : 'no inbound on approach'}
+        </span>
+      </div>
+      <div className="pc-plane-eta mono">{pace.toFixed(0)}/h base pace</div>
+    </>
+  );
+}
+
 /* ─── PlaceBar ────────────────────────────────────────────── */
 
 function PlaceBar({
@@ -335,8 +383,7 @@ function PlaceBar({
 }: {
   picked: AirportCode;
   opp: AirportCode;
-  live: FlightSnippet;
-  mode: Mode;
+  live: DuelTakeoffFlight | DuelLandingFlight | null;
   modeMeta: { label: string; verb: string };
   odds: number;
   dec: number;
@@ -483,18 +530,15 @@ const odds = (
   pace: { takeoff: Pace; heavy: Pace; total: Pace }
 ) => {
   if (mode === 'hour') {
-    // Race winner (total_ops) duel: weighted by current totals + remaining pace
     const totalA = scores.total_ops[a] + pace.total[a] * 0.5;
     const totalB = scores.total_ops[b] + pace.total[b] * 0.5;
     const sum = Math.max(0.01, totalA + totalB);
     const pA = Math.min(0.88, (totalA / sum) * 1.04);
     return { oA: probToAmerican(pA), oB: probToAmerican(1 - pA) };
   }
-  // takeoff / landing: weight by recent takeoff pace (fast-pace = sooner)
   const paceA = Math.max(0.1, pace.takeoff[a]);
   const paceB = Math.max(0.1, pace.takeoff[b]);
   const pAraw = paceA / (paceA + paceB);
-  // narrow toward 50/50 a bit, add 5% margin
   const pA = Math.min(0.88, (0.5 + (pAraw - 0.5) * 0.75) * 1.05);
   return { oA: probToAmerican(pA), oB: probToAmerican(1 - pA) };
 };
