@@ -1,48 +1,50 @@
 import {
-  getActiveBetsForUser,
   getCurrentHourScores,
-  getNextLandingForAirport,
-  getNextTakeoffForAirport,
-  getPaceByAirport,
+  getHourlyLineForAirport,
+  getInboundPlanesForAirport,
   getRecentEvents,
 } from '@airport-pong/db';
-import { AIRPORT_CODES, getFeatureMatchup, type AirportCode } from '@airport-pong/shared';
+import {
+  AIRPORT_CODES,
+  getCurrentHourStart,
+  msUntilNextHour,
+  type AirportCode,
+} from '@airport-pong/shared';
 import { getCurrentUser } from '../lib/session';
-import { LiveDashboard } from './_components/LiveDashboard';
-import type { ActiveBet } from './_components/ActiveBets';
-import type { DuelLandingFlight, DuelTakeoffFlight } from '@airport-pong/db';
+import { TopBar } from './_components/TopBar';
+import { TickerTape } from './_components/Ticker';
+import { AirportChooser, type ChooserCard } from './_components/AirportChooser';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 export default async function Page() {
   const now = new Date();
-  const featured = getFeatureMatchup(now);
+  const hourStart = getCurrentHourStart(now);
+  const msUntilEnd = msUntilNextHour(now);
+  const locked = (60 * 60_000 - msUntilEnd) / 60_000 >= 30;
   const user = await getCurrentUser();
 
-  const [
-    scores,
-    recent,
-    takeoffPace,
-    heavyPace,
-    totalPace,
-    userBets,
-    toA,
-    toB,
-    ldgA,
-    ldgB,
-  ] = await Promise.all([
+  const [scores, recent, ...perAirport] = await Promise.all([
     getCurrentHourScores(now),
     getRecentEvents(25),
-    getPaceByAirport(30, 'takeoff'),
-    getPaceByAirport(60, 'heavy'),
-    getPaceByAirport(30, 'all'),
-    user ? getActiveBetsForUser(user.id) : Promise.resolve([]),
-    getNextTakeoffForAirport(featured[0]),
-    getNextTakeoffForAirport(featured[1]),
-    getNextLandingForAirport(featured[0]),
-    getNextLandingForAirport(featured[1]),
+    ...AIRPORT_CODES.map(async (code) => {
+      const [line, inbound] = await Promise.all([
+        getHourlyLineForAirport(code, hourStart),
+        getInboundPlanesForAirport(code),
+      ]);
+      return { code, line, inboundCount: inbound.length };
+    }),
   ]);
+
+  const initialCards: ChooserCard[] = perAirport.map(({ code, line, inboundCount }) => ({
+    airport: code as AirportCode,
+    line: line.line,
+    currentCount: scores.total_ops[code as AirportCode] ?? 0,
+    inboundCount,
+    msUntilHourEnd: msUntilEnd,
+    locked,
+  }));
 
   const initialEvents = recent.map((e) => ({
     id: e.id,
@@ -54,29 +56,6 @@ export default async function Page() {
     occurredAt: e.occurredAt.toISOString(),
   }));
 
-  const initialBets: ActiveBet[] = userBets.map((b) => ({
-    id: b.id,
-    betType: b.betType,
-    betPayload: b.betPayload,
-    stake: b.stake,
-    potentialPayout: b.potentialPayout,
-    status: b.status,
-    placedAt: b.placedAt.toISOString(),
-    resolvedAt: b.resolvedAt ? b.resolvedAt.toISOString() : null,
-  }));
-
-  const takeoffFlights: Record<AirportCode, DuelTakeoffFlight | null> = {
-    JFK: null, ORD: null, ATL: null, LAX: null,
-  };
-  takeoffFlights[featured[0]] = toA;
-  takeoffFlights[featured[1]] = toB;
-
-  const landingFlights: Record<AirportCode, DuelLandingFlight | null> = {
-    JFK: null, ORD: null, ATL: null, LAX: null,
-  };
-  landingFlights[featured[0]] = ldgA;
-  landingFlights[featured[1]] = ldgB;
-
   if (!user) {
     return (
       <main className="screen">
@@ -86,15 +65,12 @@ export default async function Page() {
   }
 
   return (
-    <LiveDashboard
-      user={{ id: user.id, callsign: user.callsign, balance: user.balance }}
-      featured={featured}
-      initialScores={scores}
-      initialEvents={initialEvents}
-      initialPace={{ takeoff: takeoffPace, heavy: heavyPace, total: totalPace }}
-      initialBets={initialBets}
-      takeoffFlights={takeoffFlights}
-      landingFlights={landingFlights}
-    />
+    <div className="app">
+      <TopBar callsign={user.callsign} balance={user.balance} active="home" />
+      <main className="stage stage-chooser">
+        <AirportChooser initialCards={initialCards} />
+      </main>
+      <TickerTape events={initialEvents} />
+    </div>
   );
 }

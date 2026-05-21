@@ -48,7 +48,6 @@ export function TopBar({ callsign, balance, active = 'home' }: Props) {
       </a>
       <nav className="nav">
         <a className={active === 'home' ? 'active' : ''} href="/">Live</a>
-        <a className={active === 'bets' || active === 'bet' ? 'active' : ''} href="/bet">Bet Types</a>
         <a className={active === 'tracker' ? 'active' : ''} href="/tracker">Tracker</a>
         <a className={active === 'leaderboard' ? 'active' : ''} href="/leaderboard">Board</a>
         <a className={active === 'your-bets' ? 'active' : ''} href="/bets">Your Bets</a>
