@@ -49,6 +49,7 @@ export function MapTracker({ airport, accent, featured }: Props) {
   useEffect(() => {
     if (!TOKEN || !containerRef.current) return;
     let cancelled = false;
+    let resizeObserver: ResizeObserver | null = null;
     (async () => {
       const mapbox = (await import('mapbox-gl')).default;
       if (cancelled || !containerRef.current) return;
@@ -66,17 +67,32 @@ export function MapTracker({ airport, accent, featured }: Props) {
       });
       map.on('load', () => {
         if (cancelled) return;
-        // Tweak built-in styling to fit our palette
         try {
           map.setPaintProperty('water', 'fill-color', '#0a0e15');
           map.setPaintProperty('land', 'background-color', '#0d1320');
         } catch {}
+        // Force a resize after first paint — common Mapbox quirk when
+        // container size only settles after CSS flex layout finishes.
+        requestAnimationFrame(() => map.resize());
+        setTimeout(() => map.resize(), 200);
         setReady(true);
       });
+      // Resize on container size changes too
+      if (containerRef.current && typeof ResizeObserver !== 'undefined') {
+        resizeObserver = new ResizeObserver(() => {
+          try {
+            map.resize();
+          } catch {}
+        });
+        resizeObserver.observe(containerRef.current);
+      }
       mapRef.current = map;
     })();
     return () => {
       cancelled = true;
+      try {
+        resizeObserver?.disconnect();
+      } catch {}
       const m = mapRef.current as { remove?: () => void } | null;
       try {
         m?.remove?.();

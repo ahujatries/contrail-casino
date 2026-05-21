@@ -3189,3 +3189,20 @@ body::before {
 }
 .trk-cell-map .ft-cell .v { font-size: 11px; }
 .trk-cell-map .ft-cell .k { font-size: 8.5px; }
+
+/* ─── Mapbox container needs position:relative + absolute children ─── */
+.map-canvas { position: relative; overflow: hidden; }
+.map-canvas .mapboxgl-map {
+  position: absolute !important;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100% !important;
+  height: 100% !important;
+}
+.map-canvas .mapboxgl-canvas-container,
+.map-canvas .mapboxgl-canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
